@@ -1,0 +1,43 @@
+{
+  "name": "project-moria",
+  "version": "1.0.0",
+  "description": "Lightning-powered API gateway platform",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio",
+    "db:local": "wrangler d1 migrations apply moria-db --local",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:flow": "pnpm db:local && node --experimental-strip-types scripts/test-flow.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/",
+    "lint:fix": "eslint src/ --fix",
+    "db:migrate:pg": "node --experimental-strip-types scripts/migrate.ts"
+  },
+  "dependencies": {
+    "@getalby/lightning-tools": "^5.0.3",
+    "@neondatabase/serverless": "^0.10.4",
+    "drizzle-orm": "^0.38.3",
+    "hono": "^4.6.14",
+    "nanoid": "^5.0.9",
+    "postgres": "^3.4.7"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.5.33",
+    "@cloudflare/workers-types": "^4.20241218.0",
+    "@eslint/js": "^9.39.2",
+    "@typescript-eslint/eslint-plugin": "^8.50.0",
+    "@typescript-eslint/parser": "^8.50.0",
+    "dotenv": "^17.2.3",
+    "drizzle-kit": "^0.30.1",
+    "eslint": "^9.39.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8",
+    "wrangler": "^3.99.0"
+  }
+}

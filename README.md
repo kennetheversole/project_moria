@@ -1,0 +1,245 @@
+# Project Moria
+
+Lightning-powered API gateway. Charge sats per request. No subscriptions, no credit cards.
+
+## What is this?
+
+A proxy that sits between users and your API. Users pay satoshis (via Lightning) for each request. Developers earn 98%, platform takes 2%.
+
+```
+User (has sats) → Moria Gateway → Your API
+                      ↓
+              Deduct sats, log request
+              Credit developer balance
+```
+
+## Use Cases
+
+- **Monetize APIs** - Charge per call without Stripe's 30¢ minimum
+- **Gate content** - Articles, videos, data behind micropayments
+- **AI agent access** - Let bots pay for API access programmatically
+- **Global payments** - No bank account needed, works anywhere
+- **Anti-abuse** - Real cost per request stops spam
+
+## Features
+
+- Pay-per-request billing (satoshis via Lightning)
+- Developer dashboard with earnings tracking
+- User balance management with Lightning top-ups
+- Request logging and analytics
+- 2% platform fee (configurable)
+- Automatic developer payouts to Lightning addresses
+
+## Tech Stack
+
+- **Runtime**: Cloudflare Workers (portable to Deno, Fly.io, etc.)
+- **Framework**: Hono
+- **Database**: PlanetScale Postgres (via Hyperdrive) or D1 SQLite
+- **ORM**: Drizzle
+- **Payments**: Lightning via Alby
+
+## Quick Start
+
+```bash
+# Install
+pnpm install
+
+# Set up environment
+cp .dev.vars.example .dev.vars
+# Edit .dev.vars with your DATABASE_URL, JWT_SECRET, ALBY_API_KEY
+
+# Run migrations
+pnpm db:migrate:pg
+
+# Start dev server
+pnpm wrangler dev --remote
+```
+
+## API Endpoints
+
+### Developers (sell APIs)
+
+```bash
+# Register
+POST /api/developers/register
+{"email": "dev@example.com", "password": "...", "name": "Dev Name"}
+
+# Login
+POST /api/developers/login
+{"email": "dev@example.com", "password": "..."}
+
+# Get profile
+GET /api/developers/me
+Authorization: Bearer <token>
+
+# Update profile (set Lightning address for payouts)
+PATCH /api/developers/me
+{"lightningAddress": "dev@getalby.com"}
+
+# Request payout
+POST /api/developers/payout
+{"amountSats": 1000}
+```
+
+### Gateways (your APIs)
+
+```bash
+# Create gateway
+POST /api/gateways
+Authorization: Bearer <token>
+{"name": "My API", "targetUrl": "https://api.example.com", "pricePerRequestSats": 10}
+
+# List gateways
+GET /api/gateways
+
+# Get gateway details + stats
+GET /api/gateways/:id
+
+# Update gateway
+PATCH /api/gateways/:id
+{"pricePerRequestSats": 20, "isActive": false}
+
+# Delete gateway
+DELETE /api/gateways/:id
+```
+
+### Users (consume APIs)
+
+```bash
+# Register (get API key)
+POST /api/users/register
+{"email": "user@example.com"}
+# Returns: {"apiKey": "mk_xxx..."}
+
+# Get balance
+GET /api/users/me
+X-API-Key: mk_xxx...
+
+# Create top-up invoice
+POST /api/users/topup
+X-API-Key: mk_xxx...
+{"amountSats": 1000}
+# Returns: {"paymentRequest": "lnbc1..."}
+
+# Check payment status
+GET /api/users/topup/:id
+```
+
+### Proxy (use gated APIs)
+
+```bash
+# Make request through gateway
+GET /g/:gatewayId/any/path/here
+X-API-Key: mk_xxx...
+
+# Response includes headers:
+# X-Balance-Remaining: 990
+# X-Request-Cost: 10
+```
+
+## Example Flow
+
+```bash
+# 1. Developer creates account
+curl -X POST http://localhost:8787/api/developers/register \
+  -H "Content-Type: application/json" \
+  -d '{"email":"dev@test.com","password":"secret","name":"Dev"}'
+
+# 2. Developer creates a gateway
+curl -X POST http://localhost:8787/api/gateways \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Weather API","targetUrl":"https://api.weather.com","pricePerRequestSats":5}'
+# Returns: {"id": "abc123", "proxyUrl": "/g/abc123"}
+
+# 3. User registers
+curl -X POST http://localhost:8787/api/users/register \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user@test.com"}'
+# Returns: {"apiKey": "mk_xxx..."}
+
+# 4. User tops up balance (pay Lightning invoice)
+curl -X POST http://localhost:8787/api/users/topup \
+  -H "X-API-Key: mk_xxx..." \
+  -H "Content-Type: application/json" \
+  -d '{"amountSats": 1000}'
+# Returns: {"paymentRequest": "lnbc1..."} -- pay this with any Lightning wallet
+
+# 5. User makes API requests
+curl http://localhost:8787/g/abc123/weather?city=london \
+  -H "X-API-Key: mk_xxx..."
+# Proxies to https://api.weather.com/weather?city=london
+# Deducts 5 sats from user, credits developer
+```
+
+## Configuration
+
+Environment variables (`.dev.vars` or Cloudflare dashboard):
+
+| Variable | Description |
+|----------|-------------|
+| `DATABASE_URL` | Postgres connection string |
+| `JWT_SECRET` | Secret for signing developer tokens |
+| `ALBY_API_KEY` | Alby API key for Lightning payments |
+| `PLATFORM_FEE_PERCENT` | Fee percentage (default: 2) |
+
+## Database Schema
+
+```
+developers    - API sellers (email, password, balance, lightning_address)
+gateways      - APIs to proxy (target_url, price_per_request, developer_id)
+users         - API consumers (email, api_key, balance)
+topups        - Lightning payment tracking
+requests      - Usage logs (gateway, user, cost, method, path)
+payouts       - Developer withdrawal history
+```
+
+## Deployment
+
+```bash
+# Deploy to Cloudflare Workers
+pnpm wrangler deploy
+
+# Set secrets
+pnpm wrangler secret put DATABASE_URL
+pnpm wrangler secret put JWT_SECRET
+pnpm wrangler secret put ALBY_API_KEY
+```
+
+## Economics
+
+- **Platform fee**: 2% (minimum 1 sat)
+- **Developer earnings**: 98%
+- **User cost**: Set by developer per gateway
+
+At 1 sat ≈ $0.001:
+- 5 sat request = $0.005 (half a cent)
+- Stripe would charge 30¢+ for the same transaction
+- Break-even: ~20,000 requests/month covers infra ($20)
+
+## Local Development
+
+```bash
+# Use local SQLite (D1)
+pnpm db:local
+pnpm dev
+
+# Or use remote Postgres
+pnpm wrangler dev --remote
+```
+
+## Scripts
+
+```bash
+pnpm dev              # Start local dev server
+pnpm test:run         # Run tests
+pnpm typecheck        # TypeScript check
+pnpm db:generate      # Generate migrations
+pnpm db:migrate:pg    # Apply migrations to Postgres
+pnpm db:local         # Apply migrations to local D1
+pnpm db:studio        # Open Drizzle Studio
+```
+
+## License
+
+MIT

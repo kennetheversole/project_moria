@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { developers, gateways, payouts } from "../db/schema";
@@ -11,17 +11,65 @@ import {
 } from "../middleware/auth";
 import { createAlbyService } from "../services/alby";
 import { requireEnv, type Env, type Variables } from "../types";
+import {
+  DeveloperRegisterRequestSchema,
+  DeveloperLoginRequestSchema,
+  DeveloperAuthResponseSchema,
+  DeveloperProfileResponseSchema,
+  DeveloperUpdateRequestSchema,
+  PayoutRequestSchema,
+  PayoutResponseSchema,
+  MessageResponseSchema,
+  ErrorResponseSchema,
+} from "../schemas";
 
-const app = new Hono<{ Bindings: Env; Variables: Variables }>();
+const app = new OpenAPIHono<{ Bindings: Env; Variables: Variables }>({
+  defaultHook: (result, c) => {
+    if (!result.success) {
+      return c.json({ success: false, error: result.error.format() }, 400);
+    }
+  },
+});
 
-// Register a new developer
-app.post("/register", async (c) => {
+// Register route
+const registerRoute = createRoute({
+  method: "post",
+  path: "/register",
+  tags: ["Developers"],
+  summary: "Register a new developer",
+  description: "Create a new developer account to start monetizing APIs.",
+  request: {
+    body: {
+      content: {
+        "application/json": {
+          schema: DeveloperRegisterRequestSchema,
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      description: "Developer registered successfully",
+      content: {
+        "application/json": {
+          schema: DeveloperAuthResponseSchema,
+        },
+      },
+    },
+    400: {
+      description: "Invalid request or email already registered",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+  },
+});
+
+app.openapi(registerRoute, async (c) => {
   const db = requireDb(c.env.DB, c.env.DATABASE_URL, c.env.HYPERDRIVE);
-  const { email, password, name, lightningAddress } = await c.req.json();
-
-  if (!email || !password) {
-    return c.json({ success: false, error: "Email and password required" }, 400);
-  }
+  const { email, password, name, lightningAddress } = c.req.valid("json");
 
   // Check if email already exists
   const existing = await db
@@ -31,7 +79,7 @@ app.post("/register", async (c) => {
     .limit(1);
 
   if (existing.length > 0) {
-    return c.json({ success: false, error: "Email already registered" }, 400);
+    return c.json({ success: false as const, error: "Email already registered" }, 400);
   }
 
   const id = nanoid();
@@ -51,19 +99,52 @@ app.post("/register", async (c) => {
   );
 
   return c.json({
-    success: true,
-    data: { id, email, name, token },
-  });
+    id,
+    email,
+    name: name ?? null,
+    token,
+  }, 200);
 });
 
-// Login
-app.post("/login", async (c) => {
-  const db = requireDb(c.env.DB, c.env.DATABASE_URL, c.env.HYPERDRIVE);
-  const { email, password } = await c.req.json();
+// Login route
+const loginRoute = createRoute({
+  method: "post",
+  path: "/login",
+  tags: ["Developers"],
+  summary: "Developer login",
+  description: "Authenticate as a developer and receive a JWT token.",
+  request: {
+    body: {
+      content: {
+        "application/json": {
+          schema: DeveloperLoginRequestSchema,
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      description: "Login successful",
+      content: {
+        "application/json": {
+          schema: DeveloperAuthResponseSchema,
+        },
+      },
+    },
+    401: {
+      description: "Invalid credentials",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+  },
+});
 
-  if (!email || !password) {
-    return c.json({ success: false, error: "Email and password required" }, 400);
-  }
+app.openapi(loginRoute, async (c) => {
+  const db = requireDb(c.env.DB, c.env.DATABASE_URL, c.env.HYPERDRIVE);
+  const { email, password } = c.req.valid("json");
 
   const developer = await db
     .select()
@@ -72,12 +153,12 @@ app.post("/login", async (c) => {
     .limit(1);
 
   if (developer.length === 0) {
-    return c.json({ success: false, error: "Invalid credentials" }, 401);
+    return c.json({ success: false as const, error: "Invalid credentials" }, 401);
   }
 
   const valid = await verifyPassword(password, developer[0].passwordHash);
   if (!valid) {
-    return c.json({ success: false, error: "Invalid credentials" }, 401);
+    return c.json({ success: false as const, error: "Invalid credentials" }, 401);
   }
 
   const token = await generateToken(
@@ -86,23 +167,47 @@ app.post("/login", async (c) => {
   );
 
   return c.json({
-    success: true,
-    data: {
-      id: developer[0].id,
-      email: developer[0].email,
-      name: developer[0].name,
-      token,
-    },
-  });
+    id: developer[0].id,
+    email: developer[0].email,
+    name: developer[0].name,
+    token,
+  }, 200);
 });
 
-// Get developer profile (authenticated)
-app.get("/me", async (c) => {
+// Get profile route
+const getProfileRoute = createRoute({
+  method: "get",
+  path: "/me",
+  tags: ["Developers"],
+  summary: "Get developer profile",
+  description: "Get the authenticated developer's profile and gateway count.",
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: "Developer profile",
+      content: {
+        "application/json": {
+          schema: DeveloperProfileResponseSchema,
+        },
+      },
+    },
+    401: {
+      description: "Unauthorized",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+  },
+});
+
+app.openapi(getProfileRoute, async (c) => {
   const db = requireDb(c.env.DB, c.env.DATABASE_URL, c.env.HYPERDRIVE);
 
   const auth = await authenticateDeveloper(c, db, requireEnv(c.env, "JWT_SECRET"));
   if (!auth.success) {
-    return c.json({ success: false, error: auth.error }, auth.status as 401);
+    return c.json({ success: false as const, error: auth.error }, 401);
   }
 
   const developer = auth.data;
@@ -114,30 +219,63 @@ app.get("/me", async (c) => {
     .where(eq(gateways.developerId, developer.id));
 
   return c.json({
-    success: true,
-    data: {
-      id: developer.id,
-      email: developer.email,
-      name: developer.name,
-      lightningAddress: developer.lightningAddress,
-      balanceSats: developer.balanceSats,
-      gatewayCount: devGateways.length,
-      createdAt: developer.createdAt,
-    },
-  });
+    id: developer.id,
+    email: developer.email,
+    name: developer.name,
+    lightningAddress: developer.lightningAddress,
+    balanceSats: developer.balanceSats,
+    gatewayCount: devGateways.length,
+    createdAt: developer.createdAt.toISOString(),
+  }, 200);
 });
 
-// Update developer profile
-app.patch("/me", async (c) => {
+// Update profile route
+const updateProfileRoute = createRoute({
+  method: "patch",
+  path: "/me",
+  tags: ["Developers"],
+  summary: "Update developer profile",
+  description: "Update the authenticated developer's name or Lightning address.",
+  security: [{ bearerAuth: [] }],
+  request: {
+    body: {
+      content: {
+        "application/json": {
+          schema: DeveloperUpdateRequestSchema,
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      description: "Profile updated",
+      content: {
+        "application/json": {
+          schema: MessageResponseSchema,
+        },
+      },
+    },
+    401: {
+      description: "Unauthorized",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+  },
+});
+
+app.openapi(updateProfileRoute, async (c) => {
   const db = requireDb(c.env.DB, c.env.DATABASE_URL, c.env.HYPERDRIVE);
 
   const auth = await authenticateDeveloper(c, db, requireEnv(c.env, "JWT_SECRET"));
   if (!auth.success) {
-    return c.json({ success: false, error: auth.error }, auth.status as 401);
+    return c.json({ success: false as const, error: auth.error }, 401);
   }
 
   const developer = auth.data;
-  const { name, lightningAddress } = await c.req.json();
+  const { name, lightningAddress } = c.req.valid("json");
 
   await db
     .update(developers)
@@ -148,37 +286,82 @@ app.patch("/me", async (c) => {
     })
     .where(eq(developers.id, developer.id));
 
-  return c.json({
-    success: true,
-    data: { message: "Profile updated" },
-  });
+  return c.json({ message: "Profile updated" }, 200);
 });
 
-// Request payout
-app.post("/payout", async (c) => {
+// Payout route
+const payoutRoute = createRoute({
+  method: "post",
+  path: "/payout",
+  tags: ["Developers"],
+  summary: "Request payout",
+  description: "Withdraw earnings to your Lightning address.",
+  security: [{ bearerAuth: [] }],
+  request: {
+    body: {
+      content: {
+        "application/json": {
+          schema: PayoutRequestSchema,
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      description: "Payout successful",
+      content: {
+        "application/json": {
+          schema: PayoutResponseSchema,
+        },
+      },
+    },
+    400: {
+      description: "Invalid request or insufficient balance",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+    401: {
+      description: "Unauthorized",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+    500: {
+      description: "Payout failed",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+  },
+});
+
+app.openapi(payoutRoute, async (c) => {
   const db = requireDb(c.env.DB, c.env.DATABASE_URL, c.env.HYPERDRIVE);
 
   const auth = await authenticateDeveloper(c, db, requireEnv(c.env, "JWT_SECRET"));
   if (!auth.success) {
-    return c.json({ success: false, error: auth.error }, auth.status as 401);
+    return c.json({ success: false as const, error: auth.error }, 401);
   }
 
   const developer = auth.data;
-  const { amountSats } = await c.req.json();
+  const { amountSats } = c.req.valid("json");
 
   if (!developer.lightningAddress) {
     return c.json(
-      { success: false, error: "Set a Lightning address first" },
+      { success: false as const, error: "Set a Lightning address first" },
       400
     );
   }
 
-  if (!amountSats || amountSats < 1) {
-    return c.json({ success: false, error: "Invalid amount" }, 400);
-  }
-
   if (amountSats > developer.balanceSats) {
-    return c.json({ success: false, error: "Insufficient balance" }, 400);
+    return c.json({ success: false as const, error: "Insufficient balance" }, 400);
   }
 
   const alby = createAlbyService(c.env.ALBY_API_KEY);
@@ -220,14 +403,11 @@ app.post("/payout", async (c) => {
       .where(eq(payouts.id, payoutId));
 
     return c.json({
-      success: true,
-      data: {
-        payoutId,
-        amountSats,
-        paymentHash: payment.payment_hash,
-        newBalance: developer.balanceSats - amountSats,
-      },
-    });
+      payoutId,
+      amountSats,
+      paymentHash: payment.payment_hash,
+      newBalance: developer.balanceSats - amountSats,
+    }, 200);
   } catch (error) {
     // Refund on failure
     await db
@@ -245,7 +425,7 @@ app.post("/payout", async (c) => {
 
     return c.json(
       {
-        success: false,
+        success: false as const,
         error: `Payout failed: ${error instanceof Error ? error.message : "Unknown error"}`,
       },
       500

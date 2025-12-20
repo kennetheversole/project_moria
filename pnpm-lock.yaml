@@ -11,6 +11,12 @@ importers:
       '@getalby/lightning-tools':
         specifier: ^5.0.3
         version: 5.2.1
+      '@hono/swagger-ui':
+        specifier: ^0.5.2
+        version: 0.5.2(hono@4.11.1)
+      '@hono/zod-openapi':
+        specifier: ^1.2.0
+        version: 1.2.0(hono@4.11.1)(zod@4.2.1)
       '@neondatabase/serverless':
         specifier: ^0.10.4
         version: 0.10.4
@@ -26,6 +32,9 @@ importers:
       postgres:
         specifier: ^3.4.7
         version: 3.4.7
+      zod:
+        specifier: ^4.2.1
+        version: 4.2.1
     devDependencies:
       '@cloudflare/vitest-pool-workers':
         specifier: ^0.5.33
@@ -62,6 +71,11 @@ importers:
         version: 3.114.16(@cloudflare/workers-types@4.20251218.0)
 
 packages:
+
+  '@asteasolutions/zod-to-openapi@8.2.0':
+    resolution: {integrity: sha512-u05zNUirlukJAf9oEHmxSF31L1XQhz9XdpVILt7+xhrz65oQqBpiOWFkGvRWL0IpjOUJ878idKoNmYPxrFnkeg==}
+    peerDependencies:
+      zod: ^4.0.0
 
   '@cloudflare/kv-asset-handler@0.3.4':
     resolution: {integrity: sha512-YLPHc8yASwjNkmcDMQMY35yiWjoKAKnhUbPRszBRS0YgH+IXtsMp61j+yTcnCE3oO2DgP0U3iejLC8FTtKDC8Q==}
@@ -759,6 +773,24 @@ packages:
   '@getalby/lightning-tools@5.2.1':
     resolution: {integrity: sha512-dxOmJLJAh6qJ8rsbA5/Bwj7MSI9X3RkxxqmCedl5rfP+yKwNSdfu8i4EiCZN/tk2hNBJb8GHSCcPRNZfwfmEHg==}
     engines: {node: '>=14'}
+
+  '@hono/swagger-ui@0.5.2':
+    resolution: {integrity: sha512-7wxLKdb8h7JTdZ+K8DJNE3KXQMIpJejkBTQjrYlUWF28Z1PGOKw6kUykARe5NTfueIN37jbyG/sBYsbzXzG53A==}
+    peerDependencies:
+      hono: '*'
+
+  '@hono/zod-openapi@1.2.0':
+    resolution: {integrity: sha512-KDfHqv/Wy4elVseZXgokbHxeWuqBL+AZfqsOMpEihBMUsk/fJ+bLIi3Sf70JFVpt1Ihui8RasYrInozt7ZBDIA==}
+    engines: {node: '>=16.0.0'}
+    peerDependencies:
+      hono: '>=4.3.6'
+      zod: ^4.0.0
+
+  '@hono/zod-validator@0.7.6':
+    resolution: {integrity: sha512-Io1B6d011Gj1KknV4rXYz4le5+5EubcWEU/speUjuw9XMMIaP3n78yXLhjd2A3PXaXaUwEAluOiAyLqhBEJgsw==}
+    peerDependencies:
+      hono: '>=3.9.0'
+      zod: ^3.25.0 || ^4.0.0
 
   '@humanfs/core@0.19.1':
     resolution: {integrity: sha512-5DyQ4+1JEUzejeK1JGICcideyfUbGixgS9jNgex5nqkW+cY7WZhxBigmieN5Qnw9ZosSNVC9KQKyb+GUaGyKUA==}
@@ -1663,6 +1695,9 @@ packages:
   ohash@2.0.11:
     resolution: {integrity: sha512-RdR9FQrFwNBNXAr4GixM8YaRZRJ5PUWbKYbE5eOsrwAjJW0q2REGcf79oYPsLyskQCZG1PLN+S/K1V00joZAoQ==}
 
+  openapi3-ts@4.5.0:
+    resolution: {integrity: sha512-jaL+HgTq2Gj5jRcfdutgRGLosCy/hT8sQf6VOy+P+g36cZOjI1iukdPnijC+4CmeRzg/jEllJUboEic2FhxhtQ==}
+
   optionator@0.9.4:
     resolution: {integrity: sha512-6IpQ7mKUxRcZNLIObR0hz7lxsapSSIYNZJwXPGeF0mTVqGKFIXj1DQcMoT22S3ROcLyY/rz0PWaWZ9ayWmad9g==}
     engines: {node: '>= 0.8.0'}
@@ -2065,6 +2100,11 @@ packages:
   xxhash-wasm@1.1.0:
     resolution: {integrity: sha512-147y/6YNh+tlp6nd/2pWq38i9h6mz/EuQ6njIrmW8D1BS5nCqs0P6DG+m6zTGnNz5I+uhZ0SHxBs9BsPrwcKDA==}
 
+  yaml@2.8.2:
+    resolution: {integrity: sha512-mplynKqc1C2hTVYxd0PU2xQAc22TI1vShAYGksCCfxbn/dFwnHTNi1bvYsBTkhdUNtGIf5xNOg938rrSSYvS9A==}
+    engines: {node: '>= 14.6'}
+    hasBin: true
+
   yocto-queue@0.1.0:
     resolution: {integrity: sha512-rVksvsnNCdJ/ohGc6xgPwyN8eheCxsiLM8mxuE/t/mOVqJewPuO1miLpTHQiRgTKCLexL4MeAFVagts7HmNZ2Q==}
     engines: {node: '>=10'}
@@ -2078,7 +2118,15 @@ packages:
   zod@3.25.76:
     resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
 
+  zod@4.2.1:
+    resolution: {integrity: sha512-0wZ1IRqGGhMP76gLqz8EyfBXKk0J2qo2+H3fi4mcUP/KtTocoX08nmIAHl1Z2kJIZbZee8KOpBCSNPRgauucjw==}
+
 snapshots:
+
+  '@asteasolutions/zod-to-openapi@8.2.0(zod@4.2.1)':
+    dependencies:
+      openapi3-ts: 4.5.0
+      zod: 4.2.1
 
   '@cloudflare/kv-asset-handler@0.3.4':
     dependencies:
@@ -2491,6 +2539,23 @@ snapshots:
   '@fastify/busboy@2.1.1': {}
 
   '@getalby/lightning-tools@5.2.1': {}
+
+  '@hono/swagger-ui@0.5.2(hono@4.11.1)':
+    dependencies:
+      hono: 4.11.1
+
+  '@hono/zod-openapi@1.2.0(hono@4.11.1)(zod@4.2.1)':
+    dependencies:
+      '@asteasolutions/zod-to-openapi': 8.2.0(zod@4.2.1)
+      '@hono/zod-validator': 0.7.6(hono@4.11.1)(zod@4.2.1)
+      hono: 4.11.1
+      openapi3-ts: 4.5.0
+      zod: 4.2.1
+
+  '@hono/zod-validator@0.7.6(hono@4.11.1)(zod@4.2.1)':
+    dependencies:
+      hono: 4.11.1
+      zod: 4.2.1
 
   '@humanfs/core@0.19.1': {}
 
@@ -3354,6 +3419,10 @@ snapshots:
 
   ohash@2.0.11: {}
 
+  openapi3-ts@4.5.0:
+    dependencies:
+      yaml: 2.8.2
+
   optionator@0.9.4:
     dependencies:
       deep-is: 0.1.4
@@ -3775,6 +3844,8 @@ snapshots:
 
   xxhash-wasm@1.1.0: {}
 
+  yaml@2.8.2: {}
+
   yocto-queue@0.1.0: {}
 
   youch@3.3.4:
@@ -3786,3 +3857,5 @@ snapshots:
   zod@3.22.3: {}
 
   zod@3.25.76: {}
+
+  zod@4.2.1: {}

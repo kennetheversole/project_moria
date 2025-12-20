@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { users, topups, type Topup } from "../db/schema";
@@ -6,17 +6,66 @@ import { requireDb } from "../db";
 import { generateApiKey, authenticateUser } from "../middleware/auth";
 import { createAlbyService } from "../services/alby";
 import type { Env, Variables } from "../types";
+import {
+  UserRegisterRequestSchema,
+  UserRegisterResponseSchema,
+  UserProfileResponseSchema,
+  TopupRequestSchema,
+  TopupResponseSchema,
+  TopupIdParamSchema,
+  TopupStatusResponseSchema,
+  TopupListItemSchema,
+  ErrorResponseSchema,
+} from "../schemas";
+import { z } from "@hono/zod-openapi";
 
-const app = new Hono<{ Bindings: Env; Variables: Variables }>();
+const app = new OpenAPIHono<{ Bindings: Env; Variables: Variables }>({
+  defaultHook: (result, c) => {
+    if (!result.success) {
+      return c.json({ success: false, error: result.error.format() }, 400);
+    }
+  },
+});
 
-// Register a new user (gets API key)
-app.post("/register", async (c) => {
+// Register user route
+const registerUserRoute = createRoute({
+  method: "post",
+  path: "/register",
+  tags: ["Users"],
+  summary: "Register a new user",
+  description: "Create a new user account and receive an API key for accessing gateways.",
+  request: {
+    body: {
+      content: {
+        "application/json": {
+          schema: UserRegisterRequestSchema,
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      description: "User registered successfully",
+      content: {
+        "application/json": {
+          schema: UserRegisterResponseSchema,
+        },
+      },
+    },
+    400: {
+      description: "Invalid request or email already registered",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+  },
+});
+
+app.openapi(registerUserRoute, async (c) => {
   const db = requireDb(c.env.DB, c.env.DATABASE_URL, c.env.HYPERDRIVE);
-  const { email } = await c.req.json();
-
-  if (!email) {
-    return c.json({ success: false, error: "Email required" }, 400);
-  }
+  const { email } = c.req.valid("json");
 
   // Check if email already exists
   const existing = await db
@@ -26,7 +75,7 @@ app.post("/register", async (c) => {
     .limit(1);
 
   if (existing.length > 0) {
-    return c.json({ success: false, error: "Email already registered" }, 400);
+    return c.json({ success: false as const, error: "Email already registered" }, 400);
   }
 
   const id = nanoid();
@@ -39,56 +88,122 @@ app.post("/register", async (c) => {
   });
 
   return c.json({
-    success: true,
-    data: {
-      id,
-      email,
-      apiKey,
-      balanceSats: 0,
-    },
-  });
+    id,
+    email,
+    apiKey,
+    balanceSats: 0,
+  }, 200);
 });
 
-// Get user profile (via API key)
-app.get("/me", async (c) => {
+// Get user profile route
+const getUserProfileRoute = createRoute({
+  method: "get",
+  path: "/me",
+  tags: ["Users"],
+  summary: "Get user profile",
+  description: "Get the authenticated user's profile and balance.",
+  security: [{ apiKeyAuth: [] }],
+  responses: {
+    200: {
+      description: "User profile",
+      content: {
+        "application/json": {
+          schema: UserProfileResponseSchema,
+        },
+      },
+    },
+    401: {
+      description: "Unauthorized",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+  },
+});
+
+app.openapi(getUserProfileRoute, async (c) => {
   const db = requireDb(c.env.DB, c.env.DATABASE_URL, c.env.HYPERDRIVE);
 
   const auth = await authenticateUser(c, db);
   if (!auth.success) {
-    return c.json({ success: false, error: auth.error }, auth.status as 401);
+    return c.json({ success: false as const, error: auth.error }, 401);
   }
 
   const user = auth.data;
 
   return c.json({
-    success: true,
-    data: {
-      id: user.id,
-      email: user.email,
-      balanceSats: user.balanceSats,
-      createdAt: user.createdAt,
-    },
-  });
+    id: user.id,
+    email: user.email,
+    balanceSats: user.balanceSats,
+    createdAt: user.createdAt.toISOString(),
+  }, 200);
 });
 
-// Create a top-up invoice
-app.post("/topup", async (c) => {
+// Create topup route
+const createTopupRoute = createRoute({
+  method: "post",
+  path: "/topup",
+  tags: ["Users"],
+  summary: "Create a top-up invoice",
+  description: "Create a Lightning invoice to add funds to your account.",
+  security: [{ apiKeyAuth: [] }],
+  request: {
+    body: {
+      content: {
+        "application/json": {
+          schema: TopupRequestSchema,
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      description: "Invoice created",
+      content: {
+        "application/json": {
+          schema: TopupResponseSchema,
+        },
+      },
+    },
+    400: {
+      description: "Invalid amount",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+    401: {
+      description: "Unauthorized",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+    500: {
+      description: "Failed to create invoice",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+  },
+});
+
+app.openapi(createTopupRoute, async (c) => {
   const db = requireDb(c.env.DB, c.env.DATABASE_URL, c.env.HYPERDRIVE);
 
   const auth = await authenticateUser(c, db);
   if (!auth.success) {
-    return c.json({ success: false, error: auth.error }, auth.status as 401);
+    return c.json({ success: false as const, error: auth.error }, 401);
   }
 
   const user = auth.data;
-  const { amountSats } = await c.req.json();
-
-  if (!amountSats || amountSats < 100) {
-    return c.json(
-      { success: false, error: "Minimum top-up is 100 sats" },
-      400
-    );
-  }
+  const { amountSats } = c.req.valid("json");
 
   const alby = createAlbyService(c.env.ALBY_API_KEY);
 
@@ -109,19 +224,16 @@ app.post("/topup", async (c) => {
     });
 
     return c.json({
-      success: true,
-      data: {
-        topupId,
-        amountSats,
-        paymentRequest: invoice.payment_request,
-        paymentHash: invoice.payment_hash,
-        expiresAt: invoice.expires_at,
-      },
-    });
+      topupId,
+      amountSats,
+      paymentRequest: invoice.payment_request,
+      paymentHash: invoice.payment_hash,
+      expiresAt: invoice.expires_at,
+    }, 200);
   } catch (error) {
     return c.json(
       {
-        success: false,
+        success: false as const,
         error: `Failed to create invoice: ${error instanceof Error ? error.message : "Unknown error"}`,
       },
       500
@@ -129,17 +241,55 @@ app.post("/topup", async (c) => {
   }
 });
 
-// Check top-up status
-app.get("/topup/:id", async (c) => {
+// Get topup status route
+const getTopupStatusRoute = createRoute({
+  method: "get",
+  path: "/topup/{id}",
+  tags: ["Users"],
+  summary: "Check top-up status",
+  description: "Check the payment status of a top-up invoice.",
+  security: [{ apiKeyAuth: [] }],
+  request: {
+    params: TopupIdParamSchema,
+  },
+  responses: {
+    200: {
+      description: "Top-up status",
+      content: {
+        "application/json": {
+          schema: TopupStatusResponseSchema,
+        },
+      },
+    },
+    401: {
+      description: "Unauthorized",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+    404: {
+      description: "Top-up not found",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+  },
+});
+
+app.openapi(getTopupStatusRoute, async (c) => {
   const db = requireDb(c.env.DB, c.env.DATABASE_URL, c.env.HYPERDRIVE);
 
   const auth = await authenticateUser(c, db);
   if (!auth.success) {
-    return c.json({ success: false, error: auth.error }, auth.status as 401);
+    return c.json({ success: false as const, error: auth.error }, 401);
   }
 
   const user = auth.data;
-  const topupId = c.req.param("id");
+  const { id: topupId } = c.req.valid("param");
 
   const topup = await db
     .select()
@@ -148,20 +298,17 @@ app.get("/topup/:id", async (c) => {
     .limit(1);
 
   if (topup.length === 0 || topup[0].userId !== user.id) {
-    return c.json({ success: false, error: "Top-up not found" }, 404);
+    return c.json({ success: false as const, error: "Top-up not found" }, 404);
   }
 
   // If already paid, return status
   if (topup[0].status === "paid") {
     return c.json({
-      success: true,
-      data: {
-        id: topup[0].id,
-        amountSats: topup[0].amountSats,
-        status: "paid",
-        paidAt: topup[0].paidAt,
-      },
-    });
+      id: topup[0].id,
+      amountSats: topup[0].amountSats,
+      status: "paid" as const,
+      paidAt: topup[0].paidAt?.toISOString() ?? null,
+    }, 200);
   }
 
   // Check with Alby if pending
@@ -191,15 +338,12 @@ app.get("/topup/:id", async (c) => {
           .where(eq(users.id, user.id));
 
         return c.json({
-          success: true,
-          data: {
-            id: topup[0].id,
-            amountSats: topup[0].amountSats,
-            status: "paid",
-            paidAt: new Date(),
-            newBalance: user.balanceSats + topup[0].amountSats,
-          },
-        });
+          id: topup[0].id,
+          amountSats: topup[0].amountSats,
+          status: "paid" as const,
+          paidAt: new Date().toISOString(),
+          newBalance: user.balanceSats + topup[0].amountSats,
+        }, 200);
       }
     } catch (error) {
       // Log error but continue
@@ -208,22 +352,46 @@ app.get("/topup/:id", async (c) => {
   }
 
   return c.json({
-    success: true,
-    data: {
-      id: topup[0].id,
-      amountSats: topup[0].amountSats,
-      status: topup[0].status,
-    },
-  });
+    id: topup[0].id,
+    amountSats: topup[0].amountSats,
+    status: topup[0].status as "pending" | "paid" | "expired",
+  }, 200);
 });
 
-// List user's top-ups
-app.get("/topups", async (c) => {
+// List topups route
+const listTopupsRoute = createRoute({
+  method: "get",
+  path: "/topups",
+  tags: ["Users"],
+  summary: "List top-ups",
+  description: "Get a list of all your top-up transactions.",
+  security: [{ apiKeyAuth: [] }],
+  responses: {
+    200: {
+      description: "List of top-ups",
+      content: {
+        "application/json": {
+          schema: z.array(TopupListItemSchema),
+        },
+      },
+    },
+    401: {
+      description: "Unauthorized",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+  },
+});
+
+app.openapi(listTopupsRoute, async (c) => {
   const db = requireDb(c.env.DB, c.env.DATABASE_URL, c.env.HYPERDRIVE);
 
   const auth = await authenticateUser(c, db);
   if (!auth.success) {
-    return c.json({ success: false, error: auth.error }, auth.status as 401);
+    return c.json({ success: false as const, error: auth.error }, 401);
   }
 
   const user = auth.data;
@@ -233,16 +401,16 @@ app.get("/topups", async (c) => {
     .from(topups)
     .where(eq(topups.userId, user.id));
 
-  return c.json({
-    success: true,
-    data: userTopups.map((t: Topup) => ({
+  return c.json(
+    userTopups.map((t: Topup) => ({
       id: t.id,
       amountSats: t.amountSats,
-      status: t.status,
-      createdAt: t.createdAt,
-      paidAt: t.paidAt,
+      status: t.status as "pending" | "paid" | "expired",
+      createdAt: t.createdAt.toISOString(),
+      paidAt: t.paidAt?.toISOString() ?? null,
     })),
-  });
+    200
+  );
 });
 
 export default app;

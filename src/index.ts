@@ -1,4 +1,5 @@
-import { Hono } from "hono";
+import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
+import { swaggerUI } from "@hono/swagger-ui";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { getDb } from "./db";
@@ -8,8 +9,15 @@ import gatewaysRoutes from "./routes/gateways";
 import usersRoutes from "./routes/users";
 import proxyRoutes from "./routes/proxy";
 import type { Env } from "./types";
+import { ApiInfoResponseSchema, HealthResponseSchema } from "./schemas";
 
-const app = new Hono<{ Bindings: Env }>();
+const app = new OpenAPIHono<{ Bindings: Env }>({
+  defaultHook: (result, c) => {
+    if (!result.success) {
+      return c.json({ success: false, error: result.error.format() }, 400);
+    }
+  },
+});
 
 // Global middleware
 app.use("*", logger());
@@ -26,8 +34,67 @@ app.use("*", async (c, next) => {
 app.use("/api/*", rateLimit({ windowMs: 60_000, max: 100 }));
 app.use("/g/*", rateLimit({ windowMs: 60_000, max: 200 })); // Higher limit for proxy
 
-// API info (static index.html serves at /)
-app.get("/api", (c) => {
+// Register security schemes
+app.openAPIRegistry.registerComponent("securitySchemes", "bearerAuth", {
+  type: "http",
+  scheme: "bearer",
+  bearerFormat: "JWT",
+  description: "JWT token for developer authentication",
+});
+
+app.openAPIRegistry.registerComponent("securitySchemes", "apiKeyAuth", {
+  type: "apiKey",
+  in: "header",
+  name: "X-API-Key",
+  description: "API key for user authentication",
+});
+
+// OpenAPI documentation
+app.doc("/api/openapi.json", {
+  openapi: "3.0.0",
+  info: {
+    title: "Project Moria - Lightning API Gateway",
+    version: "1.0.0",
+    description:
+      "A Lightning-powered API gateway platform that allows developers to monetize their APIs with Bitcoin Lightning payments.",
+  },
+  servers: [
+    {
+      url: "/",
+      description: "Current server",
+    },
+  ],
+  tags: [
+    { name: "Info", description: "API information and health checks" },
+    { name: "Developers", description: "Developer authentication and management" },
+    { name: "Gateways", description: "API gateway management" },
+    { name: "Users", description: "User registration and balance management" },
+  ],
+});
+
+// Swagger UI
+app.get("/api/docs", swaggerUI({ url: "/api/openapi.json" }));
+
+// API info route
+const apiInfoRoute = createRoute({
+  method: "get",
+  path: "/api",
+  tags: ["Info"],
+  summary: "API information",
+  description: "Get basic information about the API and available endpoints.",
+  responses: {
+    200: {
+      description: "API information",
+      content: {
+        "application/json": {
+          schema: ApiInfoResponseSchema,
+        },
+      },
+    },
+  },
+});
+
+app.openapi(apiInfoRoute, (c) => {
   const dbAvailable = !!getDb(c.env.DB, c.env.DATABASE_URL, c.env.HYPERDRIVE);
 
   return c.json({
@@ -44,8 +111,26 @@ app.get("/api", (c) => {
   });
 });
 
-// Health check endpoint
-app.get("/api/health", (c) => {
+// Health check route
+const healthRoute = createRoute({
+  method: "get",
+  path: "/api/health",
+  tags: ["Info"],
+  summary: "Health check",
+  description: "Check the health status of the API and database connection.",
+  responses: {
+    200: {
+      description: "Health status",
+      content: {
+        "application/json": {
+          schema: HealthResponseSchema,
+        },
+      },
+    },
+  },
+});
+
+app.openapi(healthRoute, (c) => {
   const dbAvailable = !!getDb(c.env.DB, c.env.DATABASE_URL, c.env.HYPERDRIVE);
 
   return c.json({

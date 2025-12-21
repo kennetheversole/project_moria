@@ -1,6 +1,6 @@
 import type { Context } from "hono";
 import { eq } from "drizzle-orm";
-import { users, developers, type User, type Developer } from "../db/schema";
+import { sessions, developers, type Session, type Developer } from "../db/schema";
 import type { Database } from "../db";
 
 // Simple password hashing (for demo - use bcrypt/argon2 in production)
@@ -21,11 +21,11 @@ export async function verifyPassword(
   return computedHash === hash;
 }
 
-// Generate a secure API key
-export function generateApiKey(): string {
+// Generate a secure session key
+export function generateSessionKey(): string {
   const bytes = new Uint8Array(32);
   crypto.getRandomValues(bytes);
-  return "mk_" + Array.from(bytes)
+  return "sk_" + Array.from(bytes)
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
 }
@@ -79,28 +79,28 @@ export type AuthResult<T> =
   | { success: true; data: T }
   | { success: false; error: string; status: number };
 
-// Authenticate users via API key - returns user or error
-export async function authenticateUser(
+// Authenticate sessions via session key - returns session or error
+export async function authenticateSession(
   c: Context,
   db: Database
-): Promise<AuthResult<User>> {
-  const apiKey = c.req.header("X-API-Key") || c.req.query("api_key");
+): Promise<AuthResult<Session>> {
+  const sessionKey = c.req.header("X-Session-Key") || c.req.query("session_key");
 
-  if (!apiKey) {
-    return { success: false, error: "API key required", status: 401 };
+  if (!sessionKey) {
+    return { success: false, error: "Session key required", status: 401 };
   }
 
-  const user = await db
+  const session = await db
     .select()
-    .from(users)
-    .where(eq(users.apiKey, apiKey))
+    .from(sessions)
+    .where(eq(sessions.sessionKey, sessionKey))
     .limit(1);
 
-  if (user.length === 0) {
-    return { success: false, error: "Invalid API key", status: 401 };
+  if (session.length === 0) {
+    return { success: false, error: "Invalid session key", status: 401 };
   }
 
-  return { success: true, data: user[0] };
+  return { success: true, data: session[0] };
 }
 
 // Authenticate developers via Bearer token - returns developer or error
@@ -136,13 +136,13 @@ export async function authenticateDeveloper(
 }
 
 // Legacy middleware exports for compatibility (kept but deprecated)
-export function apiKeyAuth(db: Database) {
+export function sessionKeyAuth(db: Database) {
   return async (c: Context, next: () => Promise<void>) => {
-    const result = await authenticateUser(c, db);
+    const result = await authenticateSession(c, db);
     if (!result.success) {
       return c.json({ success: false, error: result.error }, result.status as 401);
     }
-    c.set("user", result.data);
+    c.set("session", result.data);
     await next();
   };
 }

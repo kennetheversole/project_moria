@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
-import { gateways, users, developers, requests } from "../db/schema";
+import { gateways, sessions, developers, requests } from "../db/schema";
 import { requireDb } from "../db";
 import { calculateFees, getPlatformFeePercent } from "../services/billing";
 import type { Env } from "../types";
@@ -111,15 +111,15 @@ function generate402Page(gatewayName: string, pricePerRequest: number, gatewayId
       <div class="steps">
         <div class="step">
           <div class="step-num">1</div>
-          <div>Register at <code>/api/users/register</code></div>
+          <div>Create a top-up at <code>/api/sessions/topup</code></div>
         </div>
         <div class="step">
           <div class="step-num">2</div>
-          <div>Top up with Lightning at <code>/api/users/topup</code></div>
+          <div>Pay the Lightning invoice to get your session key</div>
         </div>
         <div class="step">
           <div class="step-num">3</div>
-          <div>Add <code>X-API-Key</code> header or <code>?api_key=</code> param</div>
+          <div>Add <code>X-Session-Key</code> header or <code>?session_key=</code> param</div>
         </div>
       </div>
       <div class="api-url">GET /g/${gatewayId}/*</div>
@@ -137,10 +137,10 @@ app.all("/:gatewayId/*", async (c) => {
   const acceptHeader = c.req.header("Accept");
   const isBrowser = isBrowserRequest(acceptHeader);
 
-  // Get API key from header or query
-  const apiKey = c.req.header("X-API-Key") || c.req.query("api_key");
+  // Get session key from header or query
+  const sessionKey = c.req.header("X-Session-Key") || c.req.query("session_key");
 
-  if (!apiKey) {
+  if (!sessionKey) {
     // Look up gateway for 402 page info
     if (isBrowser) {
       const gateway = await db
@@ -157,26 +157,26 @@ app.all("/:gatewayId/*", async (c) => {
     return c.json(
       {
         success: false,
-        error: "API key required",
+        error: "Session key required",
         code: "AUTH_REQUIRED",
       },
       401
     );
   }
 
-  // Look up user
-  const user = await db
+  // Look up session
+  const session = await db
     .select()
-    .from(users)
-    .where(eq(users.apiKey, apiKey))
+    .from(sessions)
+    .where(eq(sessions.sessionKey, sessionKey))
     .limit(1);
 
-  if (user.length === 0) {
+  if (session.length === 0) {
     return c.json(
       {
         success: false,
-        error: "Invalid API key",
-        code: "INVALID_API_KEY",
+        error: "Invalid session key",
+        code: "INVALID_SESSION_KEY",
       },
       401
     );
@@ -214,7 +214,7 @@ app.all("/:gatewayId/*", async (c) => {
   const costSats = gateway[0].pricePerRequestSats;
 
   // Check balance
-  if (user[0].balanceSats < costSats) {
+  if (session[0].balanceSats < costSats) {
     if (isBrowser) {
       return c.html(generate402Page(gateway[0].name, gateway[0].pricePerRequestSats, gatewayId), 402);
     }
@@ -223,7 +223,7 @@ app.all("/:gatewayId/*", async (c) => {
         success: false,
         error: "Insufficient balance. Please top up.",
         code: "INSUFFICIENT_BALANCE",
-        balanceSats: user[0].balanceSats,
+        balanceSats: session[0].balanceSats,
         requiredSats: costSats,
       },
       402
@@ -241,7 +241,7 @@ app.all("/:gatewayId/*", async (c) => {
   // Copy query parameters
   const originalUrl = new URL(c.req.url);
   originalUrl.searchParams.forEach((value, key) => {
-    if (key !== "api_key") {
+    if (key !== "session_key") {
       targetUrl.searchParams.set(key, value);
     }
   });
@@ -255,7 +255,7 @@ app.all("/:gatewayId/*", async (c) => {
     "te",
     "trailer",
     "upgrade",
-    "x-api-key",
+    "x-session-key",
   ]);
 
   const forwardHeaders = new Headers();
@@ -291,14 +291,14 @@ app.all("/:gatewayId/*", async (c) => {
     );
   }
 
-  // Deduct from user balance
+  // Deduct from session balance
   await db
-    .update(users)
+    .update(sessions)
     .set({
-      balanceSats: user[0].balanceSats - costSats,
+      balanceSats: session[0].balanceSats - costSats,
       updatedAt: new Date(),
     })
-    .where(eq(users.id, user[0].id));
+    .where(eq(sessions.id, session[0].id));
 
   // Credit developer
   const developer = await db
@@ -321,7 +321,7 @@ app.all("/:gatewayId/*", async (c) => {
   await db.insert(requests).values({
     id: nanoid(),
     gatewayId: gateway[0].id,
-    userId: user[0].id,
+    sessionId: session[0].id,
     costSats: fees.totalCost,
     devEarningsSats: fees.devEarnings,
     platformFeeSats: fees.platformFee,
@@ -334,7 +334,7 @@ app.all("/:gatewayId/*", async (c) => {
   const responseHeaders = new Headers(response.headers);
   responseHeaders.set(
     "X-Balance-Remaining",
-    String(user[0].balanceSats - costSats)
+    String(session[0].balanceSats - costSats)
   );
   responseHeaders.set("X-Request-Cost", String(costSats));
 

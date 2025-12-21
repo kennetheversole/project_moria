@@ -6,7 +6,7 @@ import { getDb } from "./db";
 import { rateLimit } from "./middleware/rateLimit";
 import developersRoutes from "./routes/developers";
 import gatewaysRoutes from "./routes/gateways";
-import usersRoutes from "./routes/users";
+import sessionsRoutes from "./routes/sessions";
 import proxyRoutes from "./routes/proxy";
 import type { Env } from "./types";
 import { ApiInfoResponseSchema, HealthResponseSchema } from "./schemas";
@@ -25,7 +25,7 @@ app.use("*", async (c, next) => {
   const corsMiddleware = cors({
     origin: c.env.CORS_ORIGIN || "*",
     allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowHeaders: ["Content-Type", "Authorization", "X-API-Key"],
+    allowHeaders: ["Content-Type", "Authorization", "X-Session-Key"],
   });
   return corsMiddleware(c, next);
 });
@@ -42,11 +42,11 @@ app.openAPIRegistry.registerComponent("securitySchemes", "bearerAuth", {
   description: "JWT token for developer authentication",
 });
 
-app.openAPIRegistry.registerComponent("securitySchemes", "apiKeyAuth", {
+app.openAPIRegistry.registerComponent("securitySchemes", "sessionKeyAuth", {
   type: "apiKey",
   in: "header",
-  name: "X-API-Key",
-  description: "API key for user authentication",
+  name: "X-Session-Key",
+  description: "Session key for anonymous session authentication",
 });
 
 // OpenAPI documentation
@@ -68,7 +68,7 @@ app.doc("/api/openapi.json", {
     { name: "Info", description: "API information and health checks" },
     { name: "Developers", description: "Developer authentication and management" },
     { name: "Gateways", description: "API gateway management" },
-    { name: "Users", description: "User registration and balance management" },
+    { name: "Sessions", description: "Anonymous session and balance management" },
   ],
 });
 
@@ -105,7 +105,7 @@ app.openapi(apiInfoRoute, (c) => {
     endpoints: {
       developers: "/api/developers",
       gateways: "/api/gateways",
-      users: "/api/users",
+      sessions: "/api/sessions",
       proxy: "/g/:gatewayId/*",
     },
   });
@@ -143,7 +143,7 @@ app.openapi(healthRoute, (c) => {
 // Mount routes
 app.route("/api/developers", developersRoutes);
 app.route("/api/gateways", gatewaysRoutes);
-app.route("/api/users", usersRoutes);
+app.route("/api/sessions", sessionsRoutes);
 app.route("/g", proxyRoutes);
 
 // 404 handler

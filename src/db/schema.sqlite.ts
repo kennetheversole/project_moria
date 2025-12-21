@@ -34,18 +34,17 @@ export const gateways = sqliteTable(
   (table) => [index("gateways_developer_idx").on(table.developerId)]
 );
 
-// Users - people buying access (API key + balance)
-export const users = sqliteTable(
-  "users",
+// Sessions - anonymous pay-and-go access (session key + balance)
+export const sessions = sqliteTable(
+  "sessions",
   {
     id: text("id").primaryKey(),
-    email: text("email").notNull().unique(),
-    apiKey: text("api_key").notNull().unique(),
+    sessionKey: text("session_key").notNull().unique(),
     balanceSats: integer("balance_sats").notNull().default(0),
     createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
     updatedAt: integer("updated_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
   },
-  (table) => [index("users_api_key_idx").on(table.apiKey)]
+  (table) => [index("sessions_key_idx").on(table.sessionKey)]
 );
 
 // Top-ups - Lightning payment tracking
@@ -53,7 +52,7 @@ export const topups = sqliteTable(
   "topups",
   {
     id: text("id").primaryKey(),
-    userId: text("user_id").notNull().references(() => users.id),
+    sessionId: text("session_id").notNull().references(() => sessions.id),
     amountSats: integer("amount_sats").notNull(),
     paymentHash: text("payment_hash"),
     invoiceId: text("invoice_id"),
@@ -62,7 +61,7 @@ export const topups = sqliteTable(
     paidAt: integer("paid_at", { mode: "timestamp" }),
   },
   (table) => [
-    index("topups_user_idx").on(table.userId),
+    index("topups_session_idx").on(table.sessionId),
     index("topups_payment_hash_idx").on(table.paymentHash),
   ]
 );
@@ -73,7 +72,7 @@ export const requests = sqliteTable(
   {
     id: text("id").primaryKey(),
     gatewayId: text("gateway_id").notNull().references(() => gateways.id),
-    userId: text("user_id").notNull().references(() => users.id),
+    sessionId: text("session_id").notNull().references(() => sessions.id),
     costSats: integer("cost_sats").notNull(),
     devEarningsSats: integer("dev_earnings_sats").notNull(),
     platformFeeSats: integer("platform_fee_sats").notNull(),
@@ -84,7 +83,7 @@ export const requests = sqliteTable(
   },
   (table) => [
     index("requests_gateway_idx").on(table.gatewayId),
-    index("requests_user_idx").on(table.userId),
+    index("requests_session_idx").on(table.sessionId),
     index("requests_created_idx").on(table.createdAt),
   ]
 );
@@ -109,8 +108,8 @@ export type Developer = typeof developers.$inferSelect;
 export type NewDeveloper = typeof developers.$inferInsert;
 export type Gateway = typeof gateways.$inferSelect;
 export type NewGateway = typeof gateways.$inferInsert;
-export type User = typeof users.$inferSelect;
-export type NewUser = typeof users.$inferInsert;
+export type Session = typeof sessions.$inferSelect;
+export type NewSession = typeof sessions.$inferInsert;
 export type Topup = typeof topups.$inferSelect;
 export type NewTopup = typeof topups.$inferInsert;
 export type Request = typeof requests.$inferSelect;

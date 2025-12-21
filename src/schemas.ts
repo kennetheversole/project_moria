@@ -114,31 +114,21 @@ export const GatewayIdParamSchema = z.object({
   id: z.string().openapi({ example: "gw_abc123", param: { name: "id", in: "path" } }),
 });
 
-// User schemas
-export const UserRegisterRequestSchema = z.object({
-  email: z.string().email().openapi({ example: "user@example.com" }),
-});
-
-export const UserRegisterResponseSchema = z.object({
-  id: z.string().openapi({ example: "user_abc123" }),
-  email: z.string().email().openapi({ example: "user@example.com" }),
-  apiKey: z.string().openapi({ example: "mk_abc123def456..." }),
-  balanceSats: z.number().openapi({ example: 0 }),
-});
-
-export const UserProfileResponseSchema = z.object({
-  id: z.string().openapi({ example: "user_abc123" }),
-  email: z.string().email().openapi({ example: "user@example.com" }),
+// Session schemas (anonymous pay-and-go model)
+export const SessionResponseSchema = z.object({
+  sessionKey: z.string().openapi({ example: "sk_abc123def456..." }),
   balanceSats: z.number().openapi({ example: 1000 }),
   createdAt: z.string().or(z.date()).openapi({ example: "2024-01-01T00:00:00Z" }),
 });
 
 export const TopupRequestSchema = z.object({
   amountSats: z.number().min(100).openapi({ example: 1000 }),
+  sessionKey: z.string().optional().openapi({ example: "sk_abc123def456...", description: "Optional - if not provided, a new session will be created" }),
 });
 
 export const TopupResponseSchema = z.object({
   topupId: z.string().openapi({ example: "topup_abc123" }),
+  sessionKey: z.string().openapi({ example: "sk_abc123def456..." }),
   amountSats: z.number().openapi({ example: 1000 }),
   paymentRequest: z.string().openapi({ example: "lnbc10u1p..." }),
   paymentHash: z.string().openapi({ example: "abc123def456..." }),
@@ -179,7 +169,7 @@ export const ApiInfoResponseSchema = z.object({
   endpoints: z.object({
     developers: z.string().openapi({ example: "/api/developers" }),
     gateways: z.string().openapi({ example: "/api/gateways" }),
-    users: z.string().openapi({ example: "/api/users" }),
+    sessions: z.string().openapi({ example: "/api/sessions" }),
     proxy: z.string().openapi({ example: "/g/:gatewayId/*" }),
   }),
 });
@@ -195,6 +185,6 @@ export const AuthHeaderSchema = z.object({
   authorization: z.string().openapi({ example: "Bearer eyJhbGciOiJIUzI1NiIs..." }),
 });
 
-export const ApiKeyHeaderSchema = z.object({
-  "x-api-key": z.string().openapi({ example: "mk_abc123def456..." }),
+export const SessionKeyHeaderSchema = z.object({
+  "x-session-key": z.string().openapi({ example: "sk_abc123def456..." }),
 });

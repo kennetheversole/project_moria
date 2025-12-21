@@ -39,18 +39,17 @@ export const gateways = pgTable(
   (table) => [index("gateways_developer_idx").on(table.developerId)]
 );
 
-// Users - people buying access (API key + balance)
-export const users = pgTable(
-  "users",
+// Sessions - anonymous pay-and-go access (session key + balance)
+export const sessions = pgTable(
+  "sessions",
   {
     id: text("id").primaryKey(), // nanoid
-    email: text("email").notNull().unique(),
-    apiKey: text("api_key").notNull().unique(), // Used for authentication
+    sessionKey: text("session_key").notNull().unique(), // sk_xxx - used for authentication
     balanceSats: bigint("balance_sats", { mode: "number" }).notNull().default(0), // Prepaid credits
     createdAt: timestamp("created_at").notNull().$defaultFn(() => new Date()),
     updatedAt: timestamp("updated_at").notNull().$defaultFn(() => new Date()),
   },
-  (table) => [index("users_api_key_idx").on(table.apiKey)]
+  (table) => [index("sessions_key_idx").on(table.sessionKey)]
 );
 
 // Top-ups - Lightning payment tracking
@@ -58,9 +57,9 @@ export const topups = pgTable(
   "topups",
   {
     id: text("id").primaryKey(), // nanoid
-    userId: text("user_id")
+    sessionId: text("session_id")
       .notNull()
-      .references(() => users.id),
+      .references(() => sessions.id),
     amountSats: integer("amount_sats").notNull(),
     paymentHash: text("payment_hash"), // Lightning invoice payment hash
     invoiceId: text("invoice_id"), // Alby invoice ID
@@ -69,7 +68,7 @@ export const topups = pgTable(
     paidAt: timestamp("paid_at"),
   },
   (table) => [
-    index("topups_user_idx").on(table.userId),
+    index("topups_session_idx").on(table.sessionId),
     index("topups_payment_hash_idx").on(table.paymentHash),
   ]
 );
@@ -82,9 +81,9 @@ export const requests = pgTable(
     gatewayId: text("gateway_id")
       .notNull()
       .references(() => gateways.id),
-    userId: text("user_id")
+    sessionId: text("session_id")
       .notNull()
-      .references(() => users.id),
+      .references(() => sessions.id),
     costSats: integer("cost_sats").notNull(),
     devEarningsSats: integer("dev_earnings_sats").notNull(), // 95%
     platformFeeSats: integer("platform_fee_sats").notNull(), // 5%
@@ -95,7 +94,7 @@ export const requests = pgTable(
   },
   (table) => [
     index("requests_gateway_idx").on(table.gatewayId),
-    index("requests_user_idx").on(table.userId),
+    index("requests_session_idx").on(table.sessionId),
     index("requests_created_idx").on(table.createdAt),
   ]
 );
@@ -122,8 +121,8 @@ export type Developer = typeof developers.$inferSelect;
 export type NewDeveloper = typeof developers.$inferInsert;
 export type Gateway = typeof gateways.$inferSelect;
 export type NewGateway = typeof gateways.$inferInsert;
-export type User = typeof users.$inferSelect;
-export type NewUser = typeof users.$inferInsert;
+export type Session = typeof sessions.$inferSelect;
+export type NewSession = typeof sessions.$inferInsert;
 export type Topup = typeof topups.$inferSelect;
 export type NewTopup = typeof topups.$inferInsert;
 export type Request = typeof requests.$inferSelect;

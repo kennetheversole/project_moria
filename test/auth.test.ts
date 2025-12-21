@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   hashPassword,
   verifyPassword,
-  generateApiKey,
+  generateSessionKey,
   generateToken,
   verifyToken,
 } from "../src/middleware/auth";
@@ -38,20 +38,20 @@ describe("Auth Middleware", () => {
     });
   });
 
-  describe("generateApiKey", () => {
-    it("should generate unique API keys", () => {
-      const key1 = generateApiKey();
-      const key2 = generateApiKey();
+  describe("generateSessionKey", () => {
+    it("should generate unique session keys", () => {
+      const key1 = generateSessionKey();
+      const key2 = generateSessionKey();
       expect(key1).not.toBe(key2);
     });
 
-    it("should start with mk_ prefix", () => {
-      const key = generateApiKey();
-      expect(key.startsWith("mk_")).toBe(true);
+    it("should start with sk_ prefix", () => {
+      const key = generateSessionKey();
+      expect(key.startsWith("sk_")).toBe(true);
     });
 
-    it("should be 67 characters long (mk_ + 64 hex chars)", () => {
-      const key = generateApiKey();
+    it("should be 67 characters long (sk_ + 64 hex chars)", () => {
+      const key = generateSessionKey();
       expect(key.length).toBe(67);
     });
   });

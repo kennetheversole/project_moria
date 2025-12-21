@@ -1,15 +1,13 @@
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
-import { users, topups, type Topup } from "../db/schema";
+import { sessions, topups, type Topup } from "../db/schema";
 import { requireDb } from "../db";
-import { generateApiKey, authenticateUser } from "../middleware/auth";
+import { generateSessionKey, authenticateSession } from "../middleware/auth";
 import { createAlbyService } from "../services/alby";
 import type { Env, Variables } from "../types";
 import {
-  UserRegisterRequestSchema,
-  UserRegisterResponseSchema,
-  UserProfileResponseSchema,
+  SessionResponseSchema,
   TopupRequestSchema,
   TopupResponseSchema,
   TopupIdParamSchema,
@@ -27,88 +25,20 @@ const app = new OpenAPIHono<{ Bindings: Env; Variables: Variables }>({
   },
 });
 
-// Register user route
-const registerUserRoute = createRoute({
-  method: "post",
-  path: "/register",
-  tags: ["Users"],
-  summary: "Register a new user",
-  description: "Create a new user account and receive an API key for accessing gateways.",
-  request: {
-    body: {
-      content: {
-        "application/json": {
-          schema: UserRegisterRequestSchema,
-        },
-      },
-    },
-  },
-  responses: {
-    200: {
-      description: "User registered successfully",
-      content: {
-        "application/json": {
-          schema: UserRegisterResponseSchema,
-        },
-      },
-    },
-    400: {
-      description: "Invalid request or email already registered",
-      content: {
-        "application/json": {
-          schema: ErrorResponseSchema,
-        },
-      },
-    },
-  },
-});
-
-app.openapi(registerUserRoute, async (c) => {
-  const db = requireDb(c.env.DB, c.env.DATABASE_URL, c.env.HYPERDRIVE);
-  const { email } = c.req.valid("json");
-
-  // Check if email already exists
-  const existing = await db
-    .select()
-    .from(users)
-    .where(eq(users.email, email))
-    .limit(1);
-
-  if (existing.length > 0) {
-    return c.json({ success: false as const, error: "Email already registered" }, 400);
-  }
-
-  const id = nanoid();
-  const apiKey = generateApiKey();
-
-  await db.insert(users).values({
-    id,
-    email,
-    apiKey,
-  });
-
-  return c.json({
-    id,
-    email,
-    apiKey,
-    balanceSats: 0,
-  }, 200);
-});
-
-// Get user profile route
-const getUserProfileRoute = createRoute({
+// Get session balance route
+const getSessionRoute = createRoute({
   method: "get",
   path: "/me",
-  tags: ["Users"],
-  summary: "Get user profile",
-  description: "Get the authenticated user's profile and balance.",
-  security: [{ apiKeyAuth: [] }],
+  tags: ["Sessions"],
+  summary: "Get session balance",
+  description: "Get the current session's balance.",
+  security: [{ sessionKeyAuth: [] }],
   responses: {
     200: {
-      description: "User profile",
+      description: "Session info",
       content: {
         "application/json": {
-          schema: UserProfileResponseSchema,
+          schema: SessionResponseSchema,
         },
       },
     },
@@ -123,32 +53,30 @@ const getUserProfileRoute = createRoute({
   },
 });
 
-app.openapi(getUserProfileRoute, async (c) => {
+app.openapi(getSessionRoute, async (c) => {
   const db = requireDb(c.env.DB, c.env.DATABASE_URL, c.env.HYPERDRIVE);
 
-  const auth = await authenticateUser(c, db);
+  const auth = await authenticateSession(c, db);
   if (!auth.success) {
     return c.json({ success: false as const, error: auth.error }, 401);
   }
 
-  const user = auth.data;
+  const session = auth.data;
 
   return c.json({
-    id: user.id,
-    email: user.email,
-    balanceSats: user.balanceSats,
-    createdAt: user.createdAt.toISOString(),
+    sessionKey: session.sessionKey,
+    balanceSats: session.balanceSats,
+    createdAt: session.createdAt.toISOString(),
   }, 200);
 });
 
-// Create topup route
+// Create topup route - creates session if needed
 const createTopupRoute = createRoute({
   method: "post",
   path: "/topup",
-  tags: ["Users"],
+  tags: ["Sessions"],
   summary: "Create a top-up invoice",
-  description: "Create a Lightning invoice to add funds to your account.",
-  security: [{ apiKeyAuth: [] }],
+  description: "Create a Lightning invoice to add funds. If no sessionKey is provided, a new session will be created.",
   request: {
     body: {
       content: {
@@ -176,7 +104,7 @@ const createTopupRoute = createRoute({
       },
     },
     401: {
-      description: "Unauthorized",
+      description: "Invalid session key",
       content: {
         "application/json": {
           schema: ErrorResponseSchema,
@@ -196,28 +124,49 @@ const createTopupRoute = createRoute({
 
 app.openapi(createTopupRoute, async (c) => {
   const db = requireDb(c.env.DB, c.env.DATABASE_URL, c.env.HYPERDRIVE);
+  const { amountSats, sessionKey: providedSessionKey } = c.req.valid("json");
 
-  const auth = await authenticateUser(c, db);
-  if (!auth.success) {
-    return c.json({ success: false as const, error: auth.error }, 401);
+  let sessionId: string;
+  let sessionKey: string;
+
+  if (providedSessionKey) {
+    // Validate existing session
+    const existingSession = await db
+      .select()
+      .from(sessions)
+      .where(eq(sessions.sessionKey, providedSessionKey))
+      .limit(1);
+
+    if (existingSession.length === 0) {
+      return c.json({ success: false as const, error: "Invalid session key" }, 401);
+    }
+
+    sessionId = existingSession[0].id;
+    sessionKey = providedSessionKey;
+  } else {
+    // Create new session
+    sessionId = nanoid();
+    sessionKey = generateSessionKey();
+
+    await db.insert(sessions).values({
+      id: sessionId,
+      sessionKey,
+    });
   }
-
-  const user = auth.data;
-  const { amountSats } = c.req.valid("json");
 
   const alby = createAlbyService(c.env.ALBY_API_KEY);
 
   try {
     const invoice = await alby.createInvoice(
       amountSats,
-      `API Gateway top-up for ${user.email}`
+      `API Gateway top-up`
     );
 
     const topupId = nanoid();
 
     await db.insert(topups).values({
       id: topupId,
-      userId: user.id,
+      sessionId,
       amountSats,
       paymentHash: invoice.payment_hash,
       status: "pending",
@@ -225,6 +174,7 @@ app.openapi(createTopupRoute, async (c) => {
 
     return c.json({
       topupId,
+      sessionKey,
       amountSats,
       paymentRequest: invoice.payment_request,
       paymentHash: invoice.payment_hash,
@@ -245,10 +195,10 @@ app.openapi(createTopupRoute, async (c) => {
 const getTopupStatusRoute = createRoute({
   method: "get",
   path: "/topup/{id}",
-  tags: ["Users"],
+  tags: ["Sessions"],
   summary: "Check top-up status",
   description: "Check the payment status of a top-up invoice.",
-  security: [{ apiKeyAuth: [] }],
+  security: [{ sessionKeyAuth: [] }],
   request: {
     params: TopupIdParamSchema,
   },
@@ -283,12 +233,12 @@ const getTopupStatusRoute = createRoute({
 app.openapi(getTopupStatusRoute, async (c) => {
   const db = requireDb(c.env.DB, c.env.DATABASE_URL, c.env.HYPERDRIVE);
 
-  const auth = await authenticateUser(c, db);
+  const auth = await authenticateSession(c, db);
   if (!auth.success) {
     return c.json({ success: false as const, error: auth.error }, 401);
   }
 
-  const user = auth.data;
+  const session = auth.data;
   const { id: topupId } = c.req.valid("param");
 
   const topup = await db
@@ -297,7 +247,7 @@ app.openapi(getTopupStatusRoute, async (c) => {
     .where(eq(topups.id, topupId))
     .limit(1);
 
-  if (topup.length === 0 || topup[0].userId !== user.id) {
+  if (topup.length === 0 || topup[0].sessionId !== session.id) {
     return c.json({ success: false as const, error: "Top-up not found" }, 404);
   }
 
@@ -328,21 +278,21 @@ app.openapi(getTopupStatusRoute, async (c) => {
           })
           .where(eq(topups.id, topupId));
 
-        // Credit user balance
+        // Credit session balance
         await db
-          .update(users)
+          .update(sessions)
           .set({
-            balanceSats: user.balanceSats + topup[0].amountSats,
+            balanceSats: session.balanceSats + topup[0].amountSats,
             updatedAt: new Date(),
           })
-          .where(eq(users.id, user.id));
+          .where(eq(sessions.id, session.id));
 
         return c.json({
           id: topup[0].id,
           amountSats: topup[0].amountSats,
           status: "paid" as const,
           paidAt: new Date().toISOString(),
-          newBalance: user.balanceSats + topup[0].amountSats,
+          newBalance: session.balanceSats + topup[0].amountSats,
         }, 200);
       }
     } catch (error) {
@@ -362,10 +312,10 @@ app.openapi(getTopupStatusRoute, async (c) => {
 const listTopupsRoute = createRoute({
   method: "get",
   path: "/topups",
-  tags: ["Users"],
+  tags: ["Sessions"],
   summary: "List top-ups",
   description: "Get a list of all your top-up transactions.",
-  security: [{ apiKeyAuth: [] }],
+  security: [{ sessionKeyAuth: [] }],
   responses: {
     200: {
       description: "List of top-ups",
@@ -389,20 +339,20 @@ const listTopupsRoute = createRoute({
 app.openapi(listTopupsRoute, async (c) => {
   const db = requireDb(c.env.DB, c.env.DATABASE_URL, c.env.HYPERDRIVE);
 
-  const auth = await authenticateUser(c, db);
+  const auth = await authenticateSession(c, db);
   if (!auth.success) {
     return c.json({ success: false as const, error: auth.error }, 401);
   }
 
-  const user = auth.data;
+  const session = auth.data;
 
-  const userTopups = await db
+  const sessionTopups = await db
     .select()
     .from(topups)
-    .where(eq(topups.userId, user.id));
+    .where(eq(topups.sessionId, session.id));
 
   return c.json(
-    userTopups.map((t: Topup) => ({
+    sessionTopups.map((t: Topup) => ({
       id: t.id,
       amountSats: t.amountSats,
       status: t.status as "pending" | "paid" | "expired",

@@ -25,7 +25,7 @@ User (has sats) → Moria Gateway → Your API
 
 - Pay-per-request billing (satoshis via Lightning)
 - Developer dashboard with earnings tracking
-- User balance management with Lightning top-ups
+- Anonymous sessions - no signup required, just pay and get a key
 - Request logging and analytics
 - 2% platform fee (configurable)
 - Automatic developer payouts to Lightning addresses
@@ -103,26 +103,29 @@ PATCH /api/gateways/:id
 DELETE /api/gateways/:id
 ```
 
-### Users (consume APIs)
+### Sessions (consume APIs)
 
 ```bash
-# Register (get API key)
-POST /api/users/register
-{"email": "user@example.com"}
-# Returns: {"apiKey": "mk_xxx..."}
+# Create top-up invoice (creates session automatically)
+POST /api/sessions/topup
+{"amountSats": 1000}
+# Returns: {"sessionKey": "sk_xxx...", "paymentRequest": "lnbc1..."}
+
+# Add to existing session
+POST /api/sessions/topup
+{"amountSats": 1000, "sessionKey": "sk_xxx..."}
 
 # Get balance
-GET /api/users/me
-X-API-Key: mk_xxx...
-
-# Create top-up invoice
-POST /api/users/topup
-X-API-Key: mk_xxx...
-{"amountSats": 1000}
-# Returns: {"paymentRequest": "lnbc1..."}
+GET /api/sessions/me
+X-Session-Key: sk_xxx...
 
 # Check payment status
-GET /api/users/topup/:id
+GET /api/sessions/topup/:id
+X-Session-Key: sk_xxx...
+
+# List all top-ups
+GET /api/sessions/topups
+X-Session-Key: sk_xxx...
 ```
 
 ### Proxy (use gated APIs)
@@ -130,7 +133,10 @@ GET /api/users/topup/:id
 ```bash
 # Make request through gateway
 GET /g/:gatewayId/any/path/here
-X-API-Key: mk_xxx...
+X-Session-Key: sk_xxx...
+
+# Or use query parameter
+GET /g/:gatewayId/any/path/here?session_key=sk_xxx...
 
 # Response includes headers:
 # X-Balance-Remaining: 990
@@ -152,24 +158,23 @@ curl -X POST http://localhost:8787/api/gateways \
   -d '{"name":"Weather API","targetUrl":"https://api.weather.com","pricePerRequestSats":5}'
 # Returns: {"id": "abc123", "proxyUrl": "/g/abc123"}
 
-# 3. User registers
-curl -X POST http://localhost:8787/api/users/register \
-  -H "Content-Type: application/json" \
-  -d '{"email":"user@test.com"}'
-# Returns: {"apiKey": "mk_xxx..."}
-
-# 4. User tops up balance (pay Lightning invoice)
-curl -X POST http://localhost:8787/api/users/topup \
-  -H "X-API-Key: mk_xxx..." \
+# 3. User creates a top-up (no registration needed!)
+curl -X POST http://localhost:8787/api/sessions/topup \
   -H "Content-Type: application/json" \
   -d '{"amountSats": 1000}'
-# Returns: {"paymentRequest": "lnbc1..."} -- pay this with any Lightning wallet
+# Returns: {"sessionKey": "sk_xxx...", "paymentRequest": "lnbc1..."}
+# Pay the Lightning invoice with any wallet
+
+# 4. Check payment status
+curl http://localhost:8787/api/sessions/topup/<topupId> \
+  -H "X-Session-Key: sk_xxx..."
+# Returns: {"status": "paid", "newBalance": 1000}
 
 # 5. User makes API requests
 curl http://localhost:8787/g/abc123/weather?city=london \
-  -H "X-API-Key: mk_xxx..."
+  -H "X-Session-Key: sk_xxx..."
 # Proxies to https://api.weather.com/weather?city=london
-# Deducts 5 sats from user, credits developer
+# Deducts 5 sats from session, credits developer
 ```
 
 ## Configuration
@@ -188,9 +193,9 @@ Environment variables (`.dev.vars` or Cloudflare dashboard):
 ```
 developers    - API sellers (email, password, balance, lightning_address)
 gateways      - APIs to proxy (target_url, price_per_request, developer_id)
-users         - API consumers (email, api_key, balance)
+sessions      - Anonymous API consumers (session_key, balance)
 topups        - Lightning payment tracking
-requests      - Usage logs (gateway, user, cost, method, path)
+requests      - Usage logs (gateway, session, cost, method, path)
 payouts       - Developer withdrawal history
 ```
 

@@ -1,5 +1,5 @@
 import type { Database } from "./db";
-import type { Developer, User } from "./db/schema";
+import type { Developer, Session } from "./db/schema";
 
 // Hyperdrive binding type
 interface Hyperdrive {
@@ -31,7 +31,7 @@ export interface Env {
 
 // Hono context variables
 export interface Variables {
-  user: User;
+  session: Session;
   developer: Developer;
 }
 

@@ -18,7 +18,7 @@ port = 8787
 # Hyperdrive for PlanetScale Postgres
 [[hyperdrive]]
 binding = "HYPERDRIVE"
-id = "fbbbbb5e4b12475187604c0489b73d4d"
+id = "eb0bd6695612428db11da7d683dd1da2"
 
 # Environment variables (set in dashboard or via wrangler secret)
 # DATABASE_URL - Neon Postgres connection string (production)
@@ -28,6 +28,9 @@ id = "fbbbbb5e4b12475187604c0489b73d4d"
 # Production environment (uses Neon PostgreSQL via DATABASE_URL)
 [env.production]
 name = "project-moria-production"
+routes = [
+  { pattern = "gw.telcharlabs.io", custom_domain = true }
+]
 
 # Staging environment
 [env.staging]

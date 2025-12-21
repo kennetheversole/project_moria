@@ -47,7 +47,9 @@ export class AlbyService {
 
   // Check if an invoice has been paid
   async getInvoice(paymentHash: string): Promise<AlbyInvoiceResponse> {
-    return this.request<AlbyInvoiceResponse>(`/invoices/${paymentHash}`);
+    const response = await this.request<AlbyInvoiceResponse>(`/invoices/${paymentHash}`);
+    console.log("Alby getInvoice response:", JSON.stringify(response));
+    return response;
   }
 
   // Pay out to a Lightning address using @getalby/lightning-tools

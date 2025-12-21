@@ -32,6 +32,10 @@ routes = [
   { pattern = "gw.telcharlabs.io", custom_domain = true }
 ]
 
+[[env.production.hyperdrive]]
+binding = "HYPERDRIVE"
+id = "eb0bd6695612428db11da7d683dd1da2"
+
 # Staging environment
 [env.staging]
 name = "project-moria-staging"

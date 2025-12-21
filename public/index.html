@@ -23,11 +23,13 @@
     label { display: block; margin-top: 10px; color: #888; font-size: 12px; }
     .invoice-box { background: #222; padding: 15px; border-radius: 5px; word-break: break-all; font-family: monospace; font-size: 11px; }
     .qr { text-align: center; margin: 15px 0; }
+    .session-key { font-family: monospace; font-size: 11px; word-break: break-all; background: #222; padding: 10px; border-radius: 5px; }
+    .info-text { color: #888; font-size: 13px; margin-bottom: 15px; }
   </style>
 </head>
 <body>
-  <h1>⚡ Project Moria</h1>
-  <p>Lightning-powered API Gateway</p>
+  <h1>Project Moria</h1>
+  <p>Lightning-powered API Gateway - No signup required, just pay and go!</p>
 
   <!-- API Status -->
   <div class="card">
@@ -35,30 +37,22 @@
     <pre id="status">Loading...</pre>
   </div>
 
-  <!-- User Section -->
+  <!-- Session Section -->
   <div class="card">
-    <h2>👤 User</h2>
-    <div id="user-register">
-      <label>Email</label>
-      <input type="email" id="user-email" placeholder="user@example.com">
-      <button onclick="registerUser()">Register / Get API Key</button>
+    <h2>Session</h2>
+    <div id="session-create">
+      <p class="info-text">No registration needed. Create a top-up, pay the Lightning invoice, and start using APIs immediately.</p>
+      <label>Amount (sats) - minimum 100</label>
+      <input type="number" id="topup-amount" value="1000" min="100">
+      <button onclick="createTopup()">Create Top-up Invoice</button>
     </div>
-    <div id="user-info" class="hidden">
-      <p>Email: <strong id="user-email-display"></strong></p>
-      <p>API Key: <code id="user-apikey"></code></p>
-      <p>Balance: <span class="balance" id="user-balance">0</span> sats</p>
+    <div id="session-info" class="hidden">
+      <p>Session Key:</p>
+      <div class="session-key" id="session-key-display"></div>
+      <p style="margin-top: 15px;">Balance: <span class="balance" id="session-balance">0</span> sats</p>
       <button onclick="refreshBalance()">Refresh Balance</button>
-      <button class="secondary" onclick="logout()">Logout</button>
+      <button class="secondary" onclick="logout()">Clear Session</button>
     </div>
-    <pre id="user-result"></pre>
-  </div>
-
-  <!-- Top-up Section -->
-  <div class="card" id="topup-section">
-    <h2>⚡ Top Up (Lightning)</h2>
-    <label>Amount (sats)</label>
-    <input type="number" id="topup-amount" value="1000" min="100">
-    <button onclick="createTopup()">Create Invoice</button>
     <div id="invoice-display" class="hidden">
       <p>Pay this Lightning invoice:</p>
       <div class="qr" id="qr-code"></div>
@@ -66,12 +60,12 @@
       <button onclick="copyInvoice()">Copy Invoice</button>
       <button onclick="checkPayment()">Check Payment</button>
     </div>
-    <pre id="topup-result"></pre>
+    <pre id="session-result"></pre>
   </div>
 
   <!-- Gateway Test Section -->
   <div class="card">
-    <h2>🚀 Test Gateway Proxy</h2>
+    <h2>Test Gateway Proxy</h2>
     <label>Gateway ID</label>
     <input type="text" id="gateway-id" placeholder="kJQ1bBeaV-3R">
     <label>Path</label>
@@ -82,7 +76,7 @@
 
   <!-- Developer Section -->
   <div class="card">
-    <h2>🔧 Developer</h2>
+    <h2>Developer</h2>
     <div id="dev-login">
       <label>Email</label>
       <input type="email" id="dev-email" placeholder="dev@example.com">
@@ -102,14 +96,14 @@
 
   <script>
     const API = '';  // Same origin
-    let userApiKey = localStorage.getItem('userApiKey');
+    let sessionKey = localStorage.getItem('sessionKey');
     let devToken = localStorage.getItem('devToken');
     let currentTopupId = null;
 
     // Initialize
     async function init() {
       await checkStatus();
-      if (userApiKey) {
+      if (sessionKey) {
         await refreshBalance();
       }
       if (devToken) {
@@ -127,36 +121,53 @@
       }
     }
 
-    // User functions
-    async function registerUser() {
-      const email = document.getElementById('user-email').value;
+    // Session functions
+    async function createTopup() {
+      const amount = parseInt(document.getElementById('topup-amount').value);
       try {
-        const res = await fetch(API + '/api/users/register', {
+        const body = { amountSats: amount };
+        // If we have an existing session, add funds to it
+        if (sessionKey) {
+          body.sessionKey = sessionKey;
+        }
+
+        const res = await fetch(API + '/api/sessions/topup', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email })
+          body: JSON.stringify(body)
         });
         const data = await res.json();
-        document.getElementById('user-result').textContent = JSON.stringify(data, null, 2);
-        if (data.success) {
-          userApiKey = data.data.apiKey;
-          localStorage.setItem('userApiKey', userApiKey);
-          showUserInfo(data.data);
+        document.getElementById('session-result').textContent = JSON.stringify(data, null, 2);
+
+        if (data.sessionKey) {
+          sessionKey = data.sessionKey;
+          localStorage.setItem('sessionKey', sessionKey);
+          currentTopupId = data.topupId;
+
+          // Show session info and invoice
+          document.getElementById('session-create').classList.add('hidden');
+          document.getElementById('session-info').classList.remove('hidden');
+          document.getElementById('session-key-display').textContent = sessionKey;
+          document.getElementById('invoice-display').classList.remove('hidden');
+          document.getElementById('invoice-string').textContent = data.paymentRequest;
+          // Generate QR code
+          document.getElementById('qr-code').innerHTML =
+            `<img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(data.paymentRequest)}" alt="Lightning Invoice QR">`;
         }
       } catch (e) {
-        document.getElementById('user-result').textContent = 'Error: ' + e.message;
+        document.getElementById('session-result').textContent = 'Error: ' + e.message;
       }
     }
 
     async function refreshBalance() {
-      if (!userApiKey) return;
+      if (!sessionKey) return;
       try {
-        const res = await fetch(API + '/api/users/me', {
-          headers: { 'X-API-Key': userApiKey }
+        const res = await fetch(API + '/api/sessions/me', {
+          headers: { 'X-Session-Key': sessionKey }
         });
         const data = await res.json();
-        if (data.success) {
-          showUserInfo(data.data);
+        if (data.balanceSats !== undefined) {
+          showSessionInfo(data);
         } else if (res.status === 401) {
           logout();
         }
@@ -165,51 +176,21 @@
       }
     }
 
-    function showUserInfo(user) {
-      document.getElementById('user-register').classList.add('hidden');
-      document.getElementById('user-info').classList.remove('hidden');
-      document.getElementById('user-email-display').textContent = user.email;
-      document.getElementById('user-apikey').textContent = userApiKey;
-      document.getElementById('user-balance').textContent = user.balanceSats || 0;
+    function showSessionInfo(session) {
+      document.getElementById('session-create').classList.add('hidden');
+      document.getElementById('session-info').classList.remove('hidden');
+      document.getElementById('session-key-display').textContent = sessionKey;
+      document.getElementById('session-balance').textContent = session.balanceSats || 0;
     }
 
     function logout() {
-      userApiKey = null;
-      localStorage.removeItem('userApiKey');
-      document.getElementById('user-register').classList.remove('hidden');
-      document.getElementById('user-info').classList.add('hidden');
-      document.getElementById('user-result').textContent = '';
-    }
-
-    // Top-up functions
-    async function createTopup() {
-      if (!userApiKey) {
-        alert('Register as a user first');
-        return;
-      }
-      const amount = parseInt(document.getElementById('topup-amount').value);
-      try {
-        const res = await fetch(API + '/api/users/topup', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-API-Key': userApiKey
-          },
-          body: JSON.stringify({ amountSats: amount })
-        });
-        const data = await res.json();
-        document.getElementById('topup-result').textContent = JSON.stringify(data, null, 2);
-        if (data.success) {
-          currentTopupId = data.data.topupId;
-          document.getElementById('invoice-display').classList.remove('hidden');
-          document.getElementById('invoice-string').textContent = data.data.paymentRequest;
-          // Generate QR code (using a simple API)
-          document.getElementById('qr-code').innerHTML =
-            `<img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(data.data.paymentRequest)}" alt="Lightning Invoice QR">`;
-        }
-      } catch (e) {
-        document.getElementById('topup-result').textContent = 'Error: ' + e.message;
-      }
+      sessionKey = null;
+      currentTopupId = null;
+      localStorage.removeItem('sessionKey');
+      document.getElementById('session-create').classList.remove('hidden');
+      document.getElementById('session-info').classList.add('hidden');
+      document.getElementById('invoice-display').classList.add('hidden');
+      document.getElementById('session-result').textContent = '';
     }
 
     function copyInvoice() {
@@ -219,34 +200,34 @@
     }
 
     async function checkPayment() {
-      if (!currentTopupId) return;
+      if (!currentTopupId || !sessionKey) return;
       try {
-        const res = await fetch(API + '/api/users/topup/' + currentTopupId, {
-          headers: { 'X-API-Key': userApiKey }
+        const res = await fetch(API + '/api/sessions/topup/' + currentTopupId, {
+          headers: { 'X-Session-Key': sessionKey }
         });
         const data = await res.json();
-        document.getElementById('topup-result').textContent = JSON.stringify(data, null, 2);
-        if (data.success && data.data.status === 'paid') {
+        document.getElementById('session-result').textContent = JSON.stringify(data, null, 2);
+        if (data.status === 'paid') {
           document.getElementById('invoice-display').classList.add('hidden');
           await refreshBalance();
           alert('Payment received! Balance updated.');
         }
       } catch (e) {
-        document.getElementById('topup-result').textContent = 'Error: ' + e.message;
+        document.getElementById('session-result').textContent = 'Error: ' + e.message;
       }
     }
 
     // Gateway test
     async function testGateway() {
-      if (!userApiKey) {
-        alert('Register as a user first');
+      if (!sessionKey) {
+        alert('Create a session first by topping up');
         return;
       }
       const gatewayId = document.getElementById('gateway-id').value;
       const path = document.getElementById('gateway-path').value;
       try {
         const res = await fetch(API + '/g/' + gatewayId + path, {
-          headers: { 'X-API-Key': userApiKey }
+          headers: { 'X-Session-Key': sessionKey }
         });
         const balanceRemaining = res.headers.get('X-Balance-Remaining');
         const requestCost = res.headers.get('X-Request-Cost');
@@ -275,10 +256,10 @@
         });
         const data = await res.json();
         document.getElementById('dev-result').textContent = JSON.stringify(data, null, 2);
-        if (data.success) {
-          devToken = data.data.token;
+        if (data.token) {
+          devToken = data.token;
           localStorage.setItem('devToken', devToken);
-          showDevInfo(data.data);
+          showDevInfo(data);
         }
       } catch (e) {
         document.getElementById('dev-result').textContent = 'Error: ' + e.message;
@@ -296,8 +277,8 @@
         });
         const data = await res.json();
         document.getElementById('dev-result').textContent = JSON.stringify(data, null, 2);
-        if (data.success) {
-          devToken = data.data.token;
+        if (data.token) {
+          devToken = data.token;
           localStorage.setItem('devToken', devToken);
           await getDeveloperProfile();
         }
@@ -313,8 +294,8 @@
           headers: { 'Authorization': 'Bearer ' + devToken }
         });
         const data = await res.json();
-        if (data.success) {
-          showDevInfo(data.data);
+        if (data.email) {
+          showDevInfo(data);
         } else if (res.status === 401) {
           logoutDeveloper();
         }

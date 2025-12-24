@@ -8,17 +8,21 @@ import {
   index,
 } from "drizzle-orm/pg-core";
 
-// Developers - people selling APIs
+// Developers - people selling APIs (identified by Nostr pubkey)
 export const developers = pgTable("developers", {
-  id: text("id").primaryKey(), // nanoid
-  email: text("email").notNull().unique(),
-  passwordHash: text("password_hash").notNull(),
-  name: text("name"),
+  id: text("id").primaryKey(), // 32-byte hex Nostr pubkey
   lightningAddress: text("lightning_address"), // For payouts
   balanceSats: bigint("balance_sats", { mode: "number" }).notNull().default(0), // Accumulated earnings
   createdAt: timestamp("created_at").notNull().$defaultFn(() => new Date()),
   updatedAt: timestamp("updated_at").notNull().$defaultFn(() => new Date()),
 });
+
+// Route rule type for gateway pricing
+export type RouteRule = {
+  pattern: string;  // glob pattern: /free/*, /premium/**, /**
+  price: number;    // sats (0 = free)
+  description?: string;
+};
 
 // Gateways - the APIs (URL + pricing)
 export const gateways = pgTable(
@@ -30,26 +34,32 @@ export const gateways = pgTable(
       .references(() => developers.id),
     name: text("name").notNull(),
     targetUrl: text("target_url").notNull(), // The actual API URL to proxy to
-    pricePerRequestSats: integer("price_per_request_sats").notNull().default(1),
+    pricePerRequestSats: integer("price_per_request_sats").notNull().default(1), // Default price
     isActive: boolean("is_active").notNull().default(true),
     description: text("description"),
+    rules: text("rules"), // JSON array of RouteRule - null means use default price
     createdAt: timestamp("created_at").notNull().$defaultFn(() => new Date()),
     updatedAt: timestamp("updated_at").notNull().$defaultFn(() => new Date()),
   },
   (table) => [index("gateways_developer_idx").on(table.developerId)]
 );
 
-// Sessions - anonymous pay-and-go access (session key + balance)
+// Sessions - pay-and-go access (session key + balance), optionally linked to developer
 export const sessions = pgTable(
   "sessions",
   {
     id: text("id").primaryKey(), // nanoid
     sessionKey: text("session_key").notNull().unique(), // sk_xxx - used for authentication
     balanceSats: bigint("balance_sats", { mode: "number" }).notNull().default(0), // Prepaid credits
+    developerId: text("developer_id").references(() => developers.id), // Optional owner (Nostr pubkey)
+    name: text("name"), // Optional friendly name
     createdAt: timestamp("created_at").notNull().$defaultFn(() => new Date()),
     updatedAt: timestamp("updated_at").notNull().$defaultFn(() => new Date()),
   },
-  (table) => [index("sessions_key_idx").on(table.sessionKey)]
+  (table) => [
+    index("sessions_key_idx").on(table.sessionKey),
+    index("sessions_developer_idx").on(table.developerId),
+  ]
 );
 
 // Top-ups - Lightning payment tracking

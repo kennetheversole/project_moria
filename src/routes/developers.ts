@@ -1,19 +1,17 @@
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
 import { eq } from "drizzle-orm";
-import { nanoid } from "nanoid";
-import { developers, gateways, payouts } from "../db/schema";
+import { z } from "@hono/zod-openapi";
+import { developers, gateways, payouts, sessions, type Session } from "../db/schema";
 import { requireDb } from "../db";
 import {
-  hashPassword,
-  verifyPassword,
   generateToken,
   authenticateDeveloper,
+  verifyNostrAuth,
 } from "../middleware/auth";
 import { createAlbyService } from "../services/alby";
 import { requireEnv, type Env, type Variables } from "../types";
 import {
-  DeveloperRegisterRequestSchema,
-  DeveloperLoginRequestSchema,
+  NostrAuthRequestSchema,
   DeveloperAuthResponseSchema,
   DeveloperProfileResponseSchema,
   DeveloperUpdateRequestSchema,
@@ -31,25 +29,25 @@ const app = new OpenAPIHono<{ Bindings: Env; Variables: Variables }>({
   },
 });
 
-// Register route
-const registerRoute = createRoute({
+// Nostr auth route - handles both login and signup
+const authRoute = createRoute({
   method: "post",
-  path: "/register",
+  path: "/auth",
   tags: ["Developers"],
-  summary: "Register a new developer",
-  description: "Create a new developer account to start monetizing APIs.",
+  summary: "Authenticate with Nostr",
+  description: "Sign in or create account using a signed Nostr event. If the pubkey is new, an account is automatically created.",
   request: {
     body: {
       content: {
         "application/json": {
-          schema: DeveloperRegisterRequestSchema,
+          schema: NostrAuthRequestSchema,
         },
       },
     },
   },
   responses: {
     200: {
-      description: "Developer registered successfully",
+      description: "Authentication successful",
       content: {
         "application/json": {
           schema: DeveloperAuthResponseSchema,
@@ -57,7 +55,7 @@ const registerRoute = createRoute({
       },
     },
     400: {
-      description: "Invalid request or email already registered",
+      description: "Invalid request or signature",
       content: {
         "application/json": {
           schema: ErrorResponseSchema,
@@ -67,109 +65,46 @@ const registerRoute = createRoute({
   },
 });
 
-app.openapi(registerRoute, async (c) => {
+app.openapi(authRoute, async (c) => {
   const db = requireDb(c.env.DB, c.env.DATABASE_URL, c.env.HYPERDRIVE);
-  const { email, password, name, lightningAddress } = c.req.valid("json");
+  const { signedEvent } = c.req.valid("json");
 
-  // Check if email already exists
-  const existing = await db
-    .select()
-    .from(developers)
-    .where(eq(developers.email, email))
-    .limit(1);
-
-  if (existing.length > 0) {
-    return c.json({ success: false as const, error: "Email already registered" }, 400);
+  // Verify the Nostr signature
+  const authResult = verifyNostrAuth(signedEvent);
+  if (!authResult.valid || !authResult.pubkey) {
+    return c.json({ success: false as const, error: authResult.error || "Invalid signature" }, 400);
   }
 
-  const id = nanoid();
-  const passwordHash = await hashPassword(password);
+  const pubkey = authResult.pubkey;
 
-  await db.insert(developers).values({
-    id,
-    email,
-    passwordHash,
-    name,
-    lightningAddress,
-  });
-
-  const token = await generateToken(
-    { developerId: id },
-    requireEnv(c.env, "JWT_SECRET")
-  );
-
-  return c.json({
-    id,
-    email,
-    name: name ?? null,
-    token,
-  }, 200);
-});
-
-// Login route
-const loginRoute = createRoute({
-  method: "post",
-  path: "/login",
-  tags: ["Developers"],
-  summary: "Developer login",
-  description: "Authenticate as a developer and receive a JWT token.",
-  request: {
-    body: {
-      content: {
-        "application/json": {
-          schema: DeveloperLoginRequestSchema,
-        },
-      },
-    },
-  },
-  responses: {
-    200: {
-      description: "Login successful",
-      content: {
-        "application/json": {
-          schema: DeveloperAuthResponseSchema,
-        },
-      },
-    },
-    401: {
-      description: "Invalid credentials",
-      content: {
-        "application/json": {
-          schema: ErrorResponseSchema,
-        },
-      },
-    },
-  },
-});
-
-app.openapi(loginRoute, async (c) => {
-  const db = requireDb(c.env.DB, c.env.DATABASE_URL, c.env.HYPERDRIVE);
-  const { email, password } = c.req.valid("json");
-
-  const developer = await db
+  // Check if developer exists
+  let developer = await db
     .select()
     .from(developers)
-    .where(eq(developers.email, email))
+    .where(eq(developers.id, pubkey))
     .limit(1);
 
+  // If not exists, create new developer
   if (developer.length === 0) {
-    return c.json({ success: false as const, error: "Invalid credentials" }, 401);
-  }
+    await db.insert(developers).values({
+      id: pubkey,
+    });
 
-  const valid = await verifyPassword(password, developer[0].passwordHash);
-  if (!valid) {
-    return c.json({ success: false as const, error: "Invalid credentials" }, 401);
+    developer = await db
+      .select()
+      .from(developers)
+      .where(eq(developers.id, pubkey))
+      .limit(1);
   }
 
   const token = await generateToken(
-    { developerId: developer[0].id },
+    { developerId: pubkey },
     requireEnv(c.env, "JWT_SECRET")
   );
 
   return c.json({
     id: developer[0].id,
-    email: developer[0].email,
-    name: developer[0].name,
+    pubkey: developer[0].id,
     token,
   }, 200);
 });
@@ -220,8 +155,7 @@ app.openapi(getProfileRoute, async (c) => {
 
   return c.json({
     id: developer.id,
-    email: developer.email,
-    name: developer.name,
+    pubkey: developer.id,
     lightningAddress: developer.lightningAddress,
     balanceSats: developer.balanceSats,
     gatewayCount: devGateways.length,
@@ -235,7 +169,7 @@ const updateProfileRoute = createRoute({
   path: "/me",
   tags: ["Developers"],
   summary: "Update developer profile",
-  description: "Update the authenticated developer's name or Lightning address.",
+  description: "Update the authenticated developer's Lightning address.",
   security: [{ bearerAuth: [] }],
   request: {
     body: {
@@ -275,12 +209,11 @@ app.openapi(updateProfileRoute, async (c) => {
   }
 
   const developer = auth.data;
-  const { name, lightningAddress } = c.req.valid("json");
+  const { lightningAddress } = c.req.valid("json");
 
   await db
     .update(developers)
     .set({
-      name: name ?? developer.name,
       lightningAddress: lightningAddress ?? developer.lightningAddress,
       updatedAt: new Date(),
     })
@@ -365,7 +298,7 @@ app.openapi(payoutRoute, async (c) => {
   }
 
   const alby = createAlbyService(c.env.ALBY_API_KEY);
-  const payoutId = nanoid();
+  const payoutId = crypto.randomUUID();
 
   try {
     // Deduct from balance first
@@ -431,6 +364,163 @@ app.openapi(payoutRoute, async (c) => {
       500
     );
   }
+});
+
+// Developer sessions schema
+const DeveloperSessionSchema = z.object({
+  id: z.string(),
+  sessionKey: z.string(),
+  name: z.string().nullable(),
+  balanceSats: z.number(),
+  createdAt: z.string(),
+});
+
+// Get developer sessions route
+const getSessionsRoute = createRoute({
+  method: "get",
+  path: "/sessions",
+  tags: ["Developers"],
+  summary: "Get developer sessions",
+  description: "Get all sessions linked to the authenticated developer.",
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: "List of sessions",
+      content: {
+        "application/json": {
+          schema: z.array(DeveloperSessionSchema),
+        },
+      },
+    },
+    401: {
+      description: "Unauthorized",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+  },
+});
+
+app.openapi(getSessionsRoute, async (c) => {
+  const db = requireDb(c.env.DB, c.env.DATABASE_URL, c.env.HYPERDRIVE);
+
+  const auth = await authenticateDeveloper(c, db, requireEnv(c.env, "JWT_SECRET"));
+  if (!auth.success) {
+    return c.json({ success: false as const, error: auth.error }, 401);
+  }
+
+  const developer = auth.data;
+
+  const devSessions = await db
+    .select()
+    .from(sessions)
+    .where(eq(sessions.developerId, developer.id));
+
+  return c.json(
+    devSessions.map((s: Session) => ({
+      id: s.id,
+      sessionKey: s.sessionKey,
+      name: s.name,
+      balanceSats: s.balanceSats,
+      createdAt: s.createdAt.toISOString(),
+    })),
+    200
+  );
+});
+
+// Link session to developer route
+const linkSessionRoute = createRoute({
+  method: "post",
+  path: "/sessions/link",
+  tags: ["Developers"],
+  summary: "Link session to developer",
+  description: "Link an existing session to your account using its session key.",
+  security: [{ bearerAuth: [] }],
+  request: {
+    body: {
+      content: {
+        "application/json": {
+          schema: z.object({
+            sessionKey: z.string().min(1),
+            name: z.string().optional(),
+          }),
+        },
+      },
+    },
+  },
+  responses: {
+    200: {
+      description: "Session linked",
+      content: {
+        "application/json": {
+          schema: DeveloperSessionSchema,
+        },
+      },
+    },
+    400: {
+      description: "Invalid session key or already linked",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+    401: {
+      description: "Unauthorized",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
+  },
+});
+
+app.openapi(linkSessionRoute, async (c) => {
+  const db = requireDb(c.env.DB, c.env.DATABASE_URL, c.env.HYPERDRIVE);
+
+  const auth = await authenticateDeveloper(c, db, requireEnv(c.env, "JWT_SECRET"));
+  if (!auth.success) {
+    return c.json({ success: false as const, error: auth.error }, 401);
+  }
+
+  const developer = auth.data;
+  const { sessionKey, name } = c.req.valid("json");
+
+  // Find the session
+  const session = await db
+    .select()
+    .from(sessions)
+    .where(eq(sessions.sessionKey, sessionKey))
+    .limit(1);
+
+  if (session.length === 0) {
+    return c.json({ success: false as const, error: "Session not found" }, 400);
+  }
+
+  if (session[0].developerId && session[0].developerId !== developer.id) {
+    return c.json({ success: false as const, error: "Session already linked to another account" }, 400);
+  }
+
+  // Link session to developer
+  await db
+    .update(sessions)
+    .set({
+      developerId: developer.id,
+      name: name || session[0].name,
+      updatedAt: new Date(),
+    })
+    .where(eq(sessions.id, session[0].id));
+
+  return c.json({
+    id: session[0].id,
+    sessionKey: session[0].sessionKey,
+    name: name || session[0].name,
+    balanceSats: session[0].balanceSats,
+    createdAt: session[0].createdAt.toISOString(),
+  }, 200);
 });
 
 export default app;

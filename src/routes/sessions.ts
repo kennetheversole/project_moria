@@ -159,7 +159,7 @@ app.openapi(createTopupRoute, async (c) => {
   try {
     const invoice = await alby.createInvoice(
       amountSats,
-      `API Gateway top-up`
+      `Moria top-up: ${sessionId.slice(0, 8)}`
     );
 
     const topupId = nanoid();

@@ -2,24 +2,7 @@ import type { Context } from "hono";
 import { eq } from "drizzle-orm";
 import { sessions, developers, type Session, type Developer } from "../db/schema";
 import type { Database } from "../db";
-
-// Simple password hashing (for demo - use bcrypt/argon2 in production)
-export async function hashPassword(password: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(password);
-  const hash = await crypto.subtle.digest("SHA-256", data);
-  return Array.from(new Uint8Array(hash))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
-
-export async function verifyPassword(
-  password: string,
-  hash: string
-): Promise<boolean> {
-  const computedHash = await hashPassword(password);
-  return computedHash === hash;
-}
+import { verifyEvent, type Event } from "nostr-tools";
 
 // Generate a secure session key
 export function generateSessionKey(): string {
@@ -72,6 +55,34 @@ async function signData(data: string, secret: string): Promise<string> {
   return Array.from(new Uint8Array(signature))
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
+}
+
+// Verify a Nostr signed event for authentication
+// The client signs an event with kind 27235 (NIP-98) or kind 22242 (custom auth)
+export function verifyNostrAuth(signedEvent: Event): { valid: boolean; pubkey?: string; error?: string } {
+  // Verify event signature
+  const isValid = verifyEvent(signedEvent);
+  if (!isValid) {
+    return { valid: false, error: "Invalid signature" };
+  }
+
+  // Check event kind (27235 = NIP-98 HTTP Auth, 22242 = NIP-42 style auth)
+  if (signedEvent.kind !== 27235 && signedEvent.kind !== 22242) {
+    return { valid: false, error: "Invalid event kind" };
+  }
+
+  // Check timestamp is within 60 seconds
+  const now = Math.floor(Date.now() / 1000);
+  if (Math.abs(now - signedEvent.created_at) > 60) {
+    return { valid: false, error: "Event expired" };
+  }
+
+  return { valid: true, pubkey: signedEvent.pubkey };
+}
+
+// Validate a hex pubkey (32 bytes = 64 hex chars)
+export function isValidPubkey(pubkey: string): boolean {
+  return /^[0-9a-f]{64}$/i.test(pubkey);
 }
 
 // Auth result type

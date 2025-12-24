@@ -12,30 +12,30 @@ export const SuccessResponseSchema = <T extends z.ZodTypeAny>(dataSchema: T) =>
     data: dataSchema,
   });
 
-// Developer schemas
-export const DeveloperRegisterRequestSchema = z.object({
-  email: z.string().email().openapi({ example: "dev@example.com" }),
-  password: z.string().min(8).openapi({ example: "securepassword123" }),
-  name: z.string().optional().openapi({ example: "John Doe" }),
-  lightningAddress: z.string().optional().openapi({ example: "john@getalby.com" }),
+// Nostr event schema for authentication
+export const NostrEventSchema = z.object({
+  id: z.string().openapi({ example: "a1b2c3..." }),
+  pubkey: z.string().length(64).openapi({ example: "npub1..." }),
+  created_at: z.number().openapi({ example: 1234567890 }),
+  kind: z.number().openapi({ example: 27235 }),
+  tags: z.array(z.array(z.string())).openapi({ example: [] }),
+  content: z.string().openapi({ example: "" }),
+  sig: z.string().openapi({ example: "sig..." }),
 });
 
-export const DeveloperLoginRequestSchema = z.object({
-  email: z.string().email().openapi({ example: "dev@example.com" }),
-  password: z.string().openapi({ example: "securepassword123" }),
+export const NostrAuthRequestSchema = z.object({
+  signedEvent: NostrEventSchema.openapi({ description: "Signed Nostr event (kind 27235 or 22242)" }),
 });
 
 export const DeveloperAuthResponseSchema = z.object({
-  id: z.string().openapi({ example: "abc123" }),
-  email: z.string().email().openapi({ example: "dev@example.com" }),
-  name: z.string().nullable().openapi({ example: "John Doe" }),
+  id: z.string().openapi({ example: "a1b2c3d4e5f6..." }),
+  pubkey: z.string().openapi({ example: "a1b2c3d4e5f6..." }),
   token: z.string().openapi({ example: "eyJhbGciOiJIUzI1NiIs..." }),
 });
 
 export const DeveloperProfileResponseSchema = z.object({
-  id: z.string().openapi({ example: "abc123" }),
-  email: z.string().email().openapi({ example: "dev@example.com" }),
-  name: z.string().nullable().openapi({ example: "John Doe" }),
+  id: z.string().openapi({ example: "a1b2c3d4e5f6..." }),
+  pubkey: z.string().openapi({ example: "a1b2c3d4e5f6..." }),
   lightningAddress: z.string().nullable().openapi({ example: "john@getalby.com" }),
   balanceSats: z.number().openapi({ example: 1000 }),
   gatewayCount: z.number().openapi({ example: 3 }),
@@ -43,7 +43,6 @@ export const DeveloperProfileResponseSchema = z.object({
 });
 
 export const DeveloperUpdateRequestSchema = z.object({
-  name: z.string().optional().openapi({ example: "Jane Doe" }),
   lightningAddress: z.string().optional().openapi({ example: "jane@getalby.com" }),
 });
 

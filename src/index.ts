@@ -10,6 +10,7 @@ import sessionsRoutes from "./routes/sessions";
 import proxyRoutes from "./routes/proxy";
 import type { Env } from "./types";
 import { ApiInfoResponseSchema, HealthResponseSchema } from "./schemas";
+import { createAlbyService } from "./services/alby";
 
 const app = new OpenAPIHono<{ Bindings: Env }>({
   defaultHook: (result, c) => {
@@ -138,6 +139,29 @@ app.openapi(healthRoute, (c) => {
     database: dbAvailable ? "connected" : "not configured",
     timestamp: new Date().toISOString(),
   });
+});
+
+// Invoice status endpoint for payment polling
+app.get("/api/invoices/:paymentHash/status", async (c) => {
+  const paymentHash = c.req.param("paymentHash");
+
+  try {
+    const alby = createAlbyService(c.env.ALBY_API_KEY);
+    const invoice = await alby.getInvoice(paymentHash);
+
+    return c.json({
+      paymentHash: invoice.payment_hash,
+      settled: invoice.settled || false,
+      paid: invoice.settled || false,
+    });
+  } catch (e) {
+    return c.json({
+      paymentHash,
+      settled: false,
+      paid: false,
+      error: "Invoice not found",
+    });
+  }
 });
 
 // Mount routes

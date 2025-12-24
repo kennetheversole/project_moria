@@ -3,171 +3,822 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Project Moria - API Gateway</title>
+  <title>Project Moria</title>
+  <script src="https://unpkg.com/nostr-tools@2.7.2/lib/nostr.bundle.js"></script>
   <style>
-    * { box-sizing: border-box; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background: #0a0a0a; color: #e0e0e0; }
-    h1 { color: #f7931a; }
-    h2 { color: #fff; margin-top: 30px; }
-    .card { background: #1a1a1a; border: 1px solid #333; border-radius: 8px; padding: 20px; margin: 15px 0; }
-    input, button { padding: 10px 15px; border-radius: 5px; border: 1px solid #444; font-size: 14px; }
-    input { background: #222; color: #fff; width: 100%; margin: 5px 0; }
-    button { background: #f7931a; color: #000; cursor: pointer; font-weight: bold; border: none; margin: 5px 5px 5px 0; }
-    button:hover { background: #ffa500; }
-    button.secondary { background: #333; color: #fff; }
-    pre { background: #111; padding: 15px; border-radius: 5px; overflow-x: auto; font-size: 12px; }
-    .success { color: #4caf50; }
-    .error { color: #f44336; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0a0a0a;
+      color: #e0e0e0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .container {
+      max-width: 500px;
+      width: 100%;
+      padding: 20px;
+    }
+    .card {
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 12px;
+      padding: 40px;
+    }
+    .logo {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+    .logo h1 {
+      font-size: 32px;
+      color: #fff;
+      margin-bottom: 8px;
+    }
+    .logo p {
+      color: #888;
+      font-size: 14px;
+    }
+    .divider {
+      border-top: 1px solid #333;
+      margin: 25px 0;
+    }
+    .section-title {
+      color: #888;
+      font-size: 14px;
+      margin-bottom: 15px;
+    }
+    .btn-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .btn {
+      background: #222;
+      border: 1px solid #444;
+      border-radius: 8px;
+      padding: 20px 15px;
+      color: #fff;
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.2s;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+    .btn:hover {
+      background: #2a2a2a;
+      border-color: #555;
+    }
+    .btn-full {
+      grid-column: 1 / -1;
+    }
+    .btn-primary {
+      background: #7c3aed;
+      border-color: #7c3aed;
+    }
+    .btn-primary:hover {
+      background: #6d28d9;
+    }
+    .btn-icon {
+      font-size: 24px;
+    }
+    .btn-label {
+      font-size: 14px;
+      font-weight: 500;
+    }
+    input {
+      width: 100%;
+      padding: 12px 15px;
+      background: #222;
+      border: 1px solid #444;
+      border-radius: 8px;
+      color: #fff;
+      font-size: 14px;
+      margin-bottom: 12px;
+    }
+    input:focus {
+      outline: none;
+      border-color: #7c3aed;
+    }
+    input::placeholder {
+      color: #666;
+    }
+    .hidden { display: none !important; }
+    .error { color: #f44336; font-size: 13px; margin-bottom: 10px; }
+    .success { color: #4caf50; font-size: 13px; margin-bottom: 10px; }
+
+    /* Dashboard styles */
+    .dashboard { display: none; }
+    .dashboard.active { display: block; }
+    .login-view.active { display: block; }
+    .stat-card {
+      background: #222;
+      border-radius: 8px;
+      padding: 15px;
+      margin-bottom: 12px;
+    }
+    .stat-label { color: #888; font-size: 12px; }
+    .stat-value { color: #fff; font-size: 24px; font-weight: bold; margin-top: 5px; }
+    .pubkey-display {
+      font-family: monospace;
+      font-size: 11px;
+      color: #888;
+      word-break: break-all;
+      background: #111;
+      padding: 10px;
+      border-radius: 6px;
+      margin-bottom: 15px;
+    }
+    .btn-logout {
+      background: transparent;
+      border: 1px solid #444;
+      color: #888;
+      padding: 10px;
+      width: 100%;
+      border-radius: 8px;
+      cursor: pointer;
+      margin-top: 15px;
+    }
+    .btn-logout:hover {
+      border-color: #666;
+      color: #fff;
+    }
+    .nav-tabs {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    .nav-tab {
+      flex: 1;
+      padding: 10px;
+      background: #222;
+      border: none;
+      border-radius: 8px;
+      color: #888;
+      cursor: pointer;
+    }
+    .nav-tab.active {
+      background: #7c3aed;
+      color: #fff;
+    }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* Session section */
     .balance { font-size: 24px; color: #f7931a; }
-    .hidden { display: none; }
-    label { display: block; margin-top: 10px; color: #888; font-size: 12px; }
-    .invoice-box { background: #222; padding: 15px; border-radius: 5px; word-break: break-all; font-family: monospace; font-size: 11px; }
-    .qr { text-align: center; margin: 15px 0; }
     .session-key { font-family: monospace; font-size: 11px; word-break: break-all; background: #222; padding: 10px; border-radius: 5px; }
-    .info-text { color: #888; font-size: 13px; margin-bottom: 15px; }
+    .invoice-box { background: #222; padding: 15px; border-radius: 5px; word-break: break-all; font-family: monospace; font-size: 11px; margin: 10px 0; }
+    .qr { text-align: center; margin: 15px 0; }
+    pre { background: #111; padding: 15px; border-radius: 5px; overflow-x: auto; font-size: 12px; }
   </style>
 </head>
 <body>
-  <h1>Project Moria</h1>
-  <p>Lightning-powered API Gateway - No signup required, just pay and go!</p>
+  <div class="container">
+    <!-- Login View -->
+    <div id="login-view" class="card">
+      <div class="logo">
+        <h1>Project Moria</h1>
+        <p>Lightning-powered API Gateway</p>
+      </div>
 
-  <!-- API Status -->
-  <div class="card">
-    <h2>API Status</h2>
-    <pre id="status">Loading...</pre>
-  </div>
+      <div class="divider"></div>
 
-  <!-- Session Section -->
-  <div class="card">
-    <h2>Session</h2>
-    <div id="session-create">
-      <p class="info-text">No registration needed. Create a top-up, pay the Lightning invoice, and start using APIs immediately.</p>
-      <label>Amount (sats) - minimum 100</label>
-      <input type="number" id="topup-amount" value="1000" min="100">
-      <button onclick="createTopup()">Create Top-up Invoice</button>
-    </div>
-    <div id="session-info" class="hidden">
-      <p>Session Key:</p>
-      <div class="session-key" id="session-key-display"></div>
-      <p style="margin-top: 15px;">Balance: <span class="balance" id="session-balance">0</span> sats</p>
-      <button onclick="refreshBalance()">Refresh Balance</button>
-      <button class="secondary" onclick="logout()">Clear Session</button>
-    </div>
-    <div id="invoice-display" class="hidden">
-      <p>Pay this Lightning invoice:</p>
-      <div class="qr" id="qr-code"></div>
-      <div class="invoice-box" id="invoice-string"></div>
-      <button onclick="copyInvoice()">Copy Invoice</button>
-      <button onclick="checkPayment()">Check Payment</button>
-    </div>
-    <pre id="session-result"></pre>
-  </div>
+      <p class="section-title">Sign in to get started</p>
 
-  <!-- Gateway Test Section -->
-  <div class="card">
-    <h2>Test Gateway Proxy</h2>
-    <label>Gateway ID</label>
-    <input type="text" id="gateway-id" placeholder="kJQ1bBeaV-3R">
-    <label>Path</label>
-    <input type="text" id="gateway-path" value="/get">
-    <button onclick="testGateway()">Make Request (costs sats!)</button>
-    <pre id="gateway-result"></pre>
-  </div>
+      <div class="btn-grid">
+        <button class="btn" onclick="showCreateAccount()">
+          <span class="btn-icon">✨</span>
+          <span class="btn-label">Create Nostr<br>Account</span>
+        </button>
+        <button class="btn" onclick="showImportAccount()">
+          <span class="btn-icon">↪</span>
+          <span class="btn-label">Import Nostr<br>Account</span>
+        </button>
+      </div>
 
-  <!-- Developer Section -->
-  <div class="card">
-    <h2>Developer</h2>
-    <div id="dev-login">
-      <label>Email</label>
-      <input type="email" id="dev-email" placeholder="dev@example.com">
-      <label>Password</label>
-      <input type="password" id="dev-password" placeholder="password">
-      <button onclick="loginDeveloper()">Login</button>
-      <button class="secondary" onclick="registerDeveloper()">Register</button>
+      <button class="btn btn-full btn-primary" onclick="loginWithExtension()">
+        <span class="btn-label">🔑 Use NIP-07 Extension</span>
+      </button>
+
+      <div id="login-error" class="error hidden"></div>
+
+      <!-- Create Account Form -->
+      <div id="create-form" class="hidden">
+        <div class="divider"></div>
+        <p class="section-title">Your new Nostr keys (save these!)</p>
+        <div class="stat-card">
+          <div class="stat-label">Public Key (npub)</div>
+          <div id="new-npub" class="pubkey-display"></div>
+          <div class="stat-label">Private Key (nsec) - KEEP SECRET!</div>
+          <div id="new-nsec" class="pubkey-display" style="color: #f7931a;"></div>
+        </div>
+        <button class="btn btn-full btn-primary" onclick="confirmCreateAccount()">
+          I've saved my keys - Continue
+        </button>
+      </div>
+
+      <!-- Import Account Form -->
+      <div id="import-form" class="hidden">
+        <div class="divider"></div>
+        <p class="section-title">Enter your private key</p>
+        <input type="password" id="import-nsec" placeholder="nsec1... or hex private key">
+        <button class="btn btn-full btn-primary" onclick="importAccount()">
+          Import & Sign In
+        </button>
+      </div>
     </div>
-    <div id="dev-info" class="hidden">
-      <p>Email: <strong id="dev-email-display"></strong></p>
-      <p>Balance: <span class="balance" id="dev-balance">0</span> sats</p>
-      <button onclick="getDeveloperProfile()">Refresh</button>
-      <button class="secondary" onclick="logoutDeveloper()">Logout</button>
+
+    <!-- Dashboard View -->
+    <div id="dashboard-view" class="card hidden">
+      <div class="logo">
+        <h1>Project Moria</h1>
+        <div id="welcome-msg" class="hidden" style="margin-top: 10px;"></div>
+      </div>
+
+      <div id="profile-header" class="hidden" style="display: flex; align-items: center; gap: 15px; margin-bottom: 20px; padding: 15px; background: #222; border-radius: 8px;">
+        <img id="profile-avatar" src="" alt="" style="width: 50px; height: 50px; border-radius: 50%; display: none;">
+        <div>
+          <div id="profile-name" style="font-size: 18px; font-weight: bold;"></div>
+          <div id="profile-nip05" style="font-size: 12px; color: #888;"></div>
+        </div>
+      </div>
+
+      <div class="nav-tabs">
+        <button class="nav-tab active" onclick="showTab('developer')">Developer</button>
+        <button class="nav-tab" onclick="showTab('consumer')">Consumer</button>
+      </div>
+
+      <!-- Developer Tab -->
+      <div id="developer-tab" class="tab-content active">
+        <div class="stat-card">
+          <div class="stat-label">Your Pubkey</div>
+          <div id="dev-pubkey" class="pubkey-display"></div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-label">Balance</div>
+          <div class="stat-value"><span id="dev-balance">0</span> sats</div>
+          <div id="payout-section" style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #333;">
+            <div style="display: flex; gap: 10px; align-items: center;">
+              <input type="number" id="payout-amount" placeholder="Amount (sats)" min="1" style="flex: 1; margin: 0;">
+              <button class="btn btn-primary" onclick="requestPayout()" style="padding: 12px 20px; margin: 0;">Withdraw</button>
+            </div>
+            <div id="payout-status" style="font-size: 12px; margin-top: 8px;"></div>
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <div class="stat-label">Gateways</div>
+              <div class="stat-value" id="dev-gateways">0</div>
+            </div>
+            <button class="btn btn-primary" onclick="showCreateGateway()" style="padding: 10px 16px;">+ New Gateway</button>
+          </div>
+          <div id="gateways-list" style="margin-top: 15px;"></div>
+        </div>
+
+        <!-- Create Gateway Form -->
+        <div id="create-gateway-form" class="stat-card hidden">
+          <div class="stat-label" style="margin-bottom: 15px;">Create New Gateway</div>
+          <input type="text" id="gw-name" placeholder="Gateway name" style="margin-bottom: 10px;">
+          <input type="url" id="gw-target-url" placeholder="Target URL (https://api.example.com)" style="margin-bottom: 10px;">
+          <input type="number" id="gw-price" placeholder="Price per request (sats)" value="1" min="0" style="margin-bottom: 10px;">
+          <input type="text" id="gw-description" placeholder="Description (optional)" style="margin-bottom: 10px;">
+          <div class="btn-grid">
+            <button class="btn" onclick="hideCreateGateway()">Cancel</button>
+            <button class="btn btn-primary" onclick="createGateway()">Create</button>
+          </div>
+          <div id="create-gateway-status" style="font-size: 12px; margin-top: 8px;"></div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-label">Lightning Address (for payouts)</div>
+          <input type="text" id="lightning-address" placeholder="you@getalby.com" style="margin: 10px 0 0 0;">
+          <button class="btn btn-full" onclick="updateLightningAddress()" style="margin-top: 10px;">Update</button>
+        </div>
+
+        <button class="btn-logout" onclick="logout()">Logout</button>
+      </div>
+
+      <!-- Consumer Tab -->
+      <div id="consumer-tab" class="tab-content">
+        <!-- Sessions List -->
+        <div id="sessions-list">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <p class="section-title" style="margin: 0;">Your Sessions</p>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn" onclick="showImportSession()" style="padding: 8px 15px;">Import</button>
+              <button class="btn btn-primary" onclick="createNewSession()" style="padding: 8px 15px;">+ New</button>
+            </div>
+          </div>
+          <div id="sessions-container"></div>
+          <p id="no-sessions" class="hidden" style="color: #666; text-align: center; padding: 20px;">No sessions yet. Create one or import an existing key!</p>
+
+          <!-- Import Session Form -->
+          <div id="import-session-form" class="hidden stat-card" style="margin-top: 15px;">
+            <div class="stat-label">Enter Session Key</div>
+            <input type="text" id="import-session-key" placeholder="sk_..." style="margin-top: 10px;">
+            <div class="btn-grid" style="margin-top: 10px;">
+              <button class="btn" onclick="hideImportSession()">Cancel</button>
+              <button class="btn btn-primary" onclick="importSession()">Import</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Selected Session View -->
+        <div id="selected-session" class="hidden">
+          <button class="btn" onclick="backToSessions()" style="margin-bottom: 15px; padding: 8px 15px;">← Back to Sessions</button>
+
+          <div class="stat-card">
+            <div class="stat-label">Session ID</div>
+            <div id="session-id-display" style="font-family: monospace; font-size: 14px; color: #7c3aed; margin-top: 5px;"></div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-label">Session Key</div>
+            <div id="session-key-display" class="session-key"></div>
+            <button class="btn" onclick="copySessionKey()" style="margin-top: 10px; padding: 8px 15px;">Copy Key</button>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-label">Balance</div>
+            <div class="stat-value"><span id="session-balance" class="balance">0</span> sats</div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-label">Add Funds</div>
+            <input type="number" id="topup-amount" value="1000" min="100" style="margin-top: 10px;">
+            <button class="btn btn-full btn-primary" onclick="topupSelectedSession()" style="margin-top: 10px;">Create Invoice</button>
+          </div>
+
+          <div class="btn-grid" style="margin-top: 15px;">
+            <button class="btn" onclick="refreshSelectedSession()">Refresh Balance</button>
+            <button class="btn" onclick="deleteSession()" style="border-color: #f44336; color: #f44336;">Delete Session</button>
+          </div>
+        </div>
+
+        <!-- Invoice Display -->
+        <div id="invoice-display" class="hidden">
+          <button class="btn" onclick="closeInvoice()" style="margin-bottom: 15px; padding: 8px 15px;">← Back</button>
+          <p class="section-title">Pay this Lightning invoice:</p>
+          <div class="qr" id="qr-code"></div>
+          <div class="invoice-box" id="invoice-string"></div>
+          <div class="btn-grid">
+            <button class="btn" onclick="copyInvoice()">Copy Invoice</button>
+            <button class="btn btn-primary" onclick="checkPayment()">Check Payment</button>
+          </div>
+        </div>
+      </div>
     </div>
-    <pre id="dev-result"></pre>
   </div>
 
   <script>
-    const API = '';  // Same origin
-    let sessionKey = localStorage.getItem('sessionKey');
-    let devToken = localStorage.getItem('devToken');
+    const API = '';
+    const RELAY = 'wss://relay.damus.io';
+    const APP_ID = 'moria:sessions';
+
+    let devToken = null;
+    let devPubkey = null;
+    let currentPrivateKey = null; // For signing/encryption
+    let sessions = [];
+    let selectedSessionKey = null;
     let currentTopupId = null;
+
+    // ===== Nostr Relay Functions =====
+
+    async function fetchSessionsFromRelay(pubkey) {
+      return new Promise((resolve) => {
+        const ws = new WebSocket(RELAY);
+        const subId = 'moria-' + Math.random().toString(36).slice(2);
+        let event = null;
+
+        ws.onopen = () => {
+          ws.send(JSON.stringify(['REQ', subId, {
+            kinds: [30078],
+            authors: [pubkey],
+            '#d': [APP_ID],
+            limit: 1
+          }]));
+        };
+
+        ws.onmessage = (msg) => {
+          const data = JSON.parse(msg.data);
+          if (data[0] === 'EVENT' && data[1] === subId) {
+            event = data[2];
+          } else if (data[0] === 'EOSE') {
+            ws.close();
+            resolve(event);
+          }
+        };
+
+        ws.onerror = () => resolve(null);
+        setTimeout(() => { ws.close(); resolve(event); }, 5000);
+      });
+    }
+
+    async function decryptContent(encrypted, pubkey) {
+      if (window.nostr && window.nostr.nip04) {
+        return await window.nostr.nip04.decrypt(pubkey, encrypted);
+      } else if (currentPrivateKey) {
+        return await NostrTools.nip04.decrypt(currentPrivateKey, pubkey, encrypted);
+      }
+      throw new Error('No decryption method');
+    }
+
+    async function encryptContent(content, pubkey) {
+      if (window.nostr && window.nostr.nip04) {
+        return await window.nostr.nip04.encrypt(pubkey, content);
+      } else if (currentPrivateKey) {
+        return await NostrTools.nip04.encrypt(currentPrivateKey, pubkey, content);
+      }
+      throw new Error('No encryption method');
+    }
+
+    async function publishSessionsToRelay(sessionsData) {
+      // Normalize to format compatible with 402 page (timestamps)
+      const normalizedSessions = sessionsData.map(s => ({
+        key: s.key,
+        name: s.name || null,
+        created: typeof s.created === 'string' ? new Date(s.created).getTime() : s.created
+      }));
+      const content = JSON.stringify({ sessions: normalizedSessions });
+      const encrypted = await encryptContent(content, devPubkey);
+
+      const eventTemplate = {
+        kind: 30078,
+        created_at: Math.floor(Date.now() / 1000),
+        tags: [['d', APP_ID]],
+        content: encrypted
+      };
+
+      let signedEvent;
+      if (window.nostr) {
+        signedEvent = await window.nostr.signEvent(eventTemplate);
+      } else if (currentPrivateKey) {
+        signedEvent = NostrTools.finalizeEvent(eventTemplate, currentPrivateKey);
+      } else {
+        throw new Error('No signing method');
+      }
+
+      return new Promise((resolve, reject) => {
+        const ws = new WebSocket(RELAY);
+        ws.onopen = () => ws.send(JSON.stringify(['EVENT', signedEvent]));
+        ws.onmessage = (msg) => {
+          const data = JSON.parse(msg.data);
+          if (data[0] === 'OK') {
+            ws.close();
+            resolve(true);
+          }
+        };
+        ws.onerror = () => reject(new Error('Relay error'));
+        setTimeout(() => { ws.close(); resolve(true); }, 3000);
+      });
+    }
+
+    async function loadSessionsFromNostr() {
+      if (!devPubkey) return;
+
+      try {
+        const event = await fetchSessionsFromRelay(devPubkey);
+
+        if (event) {
+          try {
+            const decrypted = await decryptContent(event.content, devPubkey);
+            const data = JSON.parse(decrypted);
+            const rawSessions = data.sessions || [];
+
+            // Normalize sessions from different formats (402 page vs main site)
+            sessions = rawSessions.map(s => ({
+              id: s.id || s.key.slice(3, 14),
+              key: s.key,
+              name: s.name || null,
+              // Handle both timestamp and ISO string formats
+              created: typeof s.created === 'number'
+                ? new Date(s.created).toISOString()
+                : s.created || new Date().toISOString()
+            }));
+
+            console.log('Loaded', sessions.length, 'sessions from Nostr relay');
+          } catch (decryptErr) {
+            console.warn('Could not decrypt sessions - re-login with your private key to access them');
+            sessions = [];
+            // If there's data but we can't decrypt it, user needs to re-authenticate
+            if (!window.nostr && !currentPrivateKey) {
+              console.warn('Please login again with your private key to access your sessions');
+            }
+          }
+        } else {
+          sessions = [];
+          console.log('No sessions found on Nostr relay');
+        }
+      } catch (e) {
+        console.error('Error loading sessions from Nostr:', e);
+        sessions = [];
+      }
+
+      renderSessionsList();
+    }
+
+    async function saveSessionsToNostr() {
+      if (!devPubkey) return;
+
+      // Check if we have a way to encrypt
+      if (!window.nostr && !currentPrivateKey) {
+        console.warn('Cannot save sessions - no encryption method available. Please re-login.');
+        return;
+      }
+
+      try {
+        await publishSessionsToRelay(sessions);
+        console.log('Sessions saved to Nostr relay');
+      } catch (e) {
+        console.error('Error saving sessions to Nostr:', e);
+      }
+    }
 
     // Initialize
     async function init() {
-      await checkStatus();
-      if (sessionKey) {
-        await refreshBalance();
+      // Check for stored credentials
+      devToken = localStorage.getItem('devToken');
+      devPubkey = localStorage.getItem('devPubkey');
+
+      if (devToken && devPubkey) {
+        // Load sessions from Nostr relay
+        await loadSessionsFromNostr();
+        await showDashboard();
       }
-      if (devToken) {
-        await getDeveloperProfile();
-      }
+      renderSessionsList();
     }
 
-    async function checkStatus() {
-      try {
-        const res = await fetch(API + '/api');
-        const data = await res.json();
-        document.getElementById('status').textContent = JSON.stringify(data, null, 2);
-      } catch (e) {
-        document.getElementById('status').textContent = 'Error: ' + e.message;
-      }
+    // Tab switching
+    function showTab(tab) {
+      document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+      document.querySelector(`[onclick="showTab('${tab}')"]`).classList.add('active');
+      document.getElementById(`${tab}-tab`).classList.add('active');
     }
 
-    // Session functions
-    async function createTopup() {
-      const amount = parseInt(document.getElementById('topup-amount').value);
+    // Show create account form
+    function showCreateAccount() {
+      document.getElementById('import-form').classList.add('hidden');
+      document.getElementById('create-form').classList.remove('hidden');
+
+      // Generate new keys
+      tempPrivateKey = NostrTools.generateSecretKey();
+      const pubkey = NostrTools.getPublicKey(tempPrivateKey);
+      const nsec = NostrTools.nip19.nsecEncode(tempPrivateKey);
+      const npub = NostrTools.nip19.npubEncode(pubkey);
+
+      document.getElementById('new-npub').textContent = npub;
+      document.getElementById('new-nsec').textContent = nsec;
+    }
+
+    // Confirm create account
+    async function confirmCreateAccount() {
+      if (!tempPrivateKey) return;
+      await authenticateWithKey(tempPrivateKey);
+    }
+
+    // Show import form
+    function showImportAccount() {
+      document.getElementById('create-form').classList.add('hidden');
+      document.getElementById('import-form').classList.remove('hidden');
+    }
+
+    // Import account with nsec
+    async function importAccount() {
+      const input = document.getElementById('import-nsec').value.trim();
+      if (!input) {
+        showError('Please enter your private key');
+        return;
+      }
+
       try {
-        const body = { amountSats: amount };
-        // If we have an existing session, add funds to it
-        if (sessionKey) {
-          body.sessionKey = sessionKey;
+        let privateKey;
+        if (input.startsWith('nsec1')) {
+          const decoded = NostrTools.nip19.decode(input);
+          privateKey = decoded.data;
+        } else {
+          // Assume hex
+          privateKey = input;
         }
 
-        const res = await fetch(API + '/api/sessions/topup', {
+        await authenticateWithKey(privateKey);
+      } catch (e) {
+        showError('Invalid private key: ' + e.message);
+      }
+    }
+
+    // Login with NIP-07 extension
+    async function loginWithExtension() {
+      if (!window.nostr) {
+        showError('No Nostr extension found. Install Alby or nos2x.');
+        return;
+      }
+
+      try {
+        const pubkey = await window.nostr.getPublicKey();
+
+        // Create auth event
+        const event = {
+          kind: 22242,
+          created_at: Math.floor(Date.now() / 1000),
+          tags: [],
+          content: 'Login to Project Moria',
+        };
+
+        const signedEvent = await window.nostr.signEvent(event);
+        await sendAuthRequest(signedEvent);
+      } catch (e) {
+        showError('Extension error: ' + e.message);
+      }
+    }
+
+    // Authenticate with private key
+    async function authenticateWithKey(privateKey) {
+      try {
+        // Convert hex string to Uint8Array if needed
+        if (typeof privateKey === 'string') {
+          privateKey = Uint8Array.from(privateKey.match(/.{2}/g).map(b => parseInt(b, 16)));
+        }
+
+        currentPrivateKey = privateKey; // Store for encryption
+        const pubkey = NostrTools.getPublicKey(privateKey);
+
+        // Create and sign auth event
+        const event = {
+          kind: 22242,
+          created_at: Math.floor(Date.now() / 1000),
+          tags: [],
+          content: 'Login to Project Moria',
+          pubkey: pubkey,
+        };
+
+        const signedEvent = NostrTools.finalizeEvent(event, privateKey);
+        await sendAuthRequest(signedEvent);
+      } catch (e) {
+        showError('Authentication failed: ' + e.message);
+      }
+    }
+
+    // Send auth request to backend
+    async function sendAuthRequest(signedEvent) {
+      try {
+        const res = await fetch(API + '/api/developers/auth', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body)
+          body: JSON.stringify({ signedEvent })
         });
+
         const data = await res.json();
-        document.getElementById('session-result').textContent = JSON.stringify(data, null, 2);
 
-        if (data.sessionKey) {
-          sessionKey = data.sessionKey;
-          localStorage.setItem('sessionKey', sessionKey);
-          currentTopupId = data.topupId;
+        if (data.token) {
+          devToken = data.token;
+          devPubkey = data.pubkey;
+          localStorage.setItem('devToken', devToken);
+          localStorage.setItem('devPubkey', devPubkey);
+          tempPrivateKey = null;
 
-          // Show session info and invoice
-          document.getElementById('session-create').classList.add('hidden');
-          document.getElementById('session-info').classList.remove('hidden');
-          document.getElementById('session-key-display').textContent = sessionKey;
-          document.getElementById('invoice-display').classList.remove('hidden');
-          document.getElementById('invoice-string').textContent = data.paymentRequest;
-          // Generate QR code
-          document.getElementById('qr-code').innerHTML =
-            `<img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(data.paymentRequest)}" alt="Lightning Invoice QR">`;
+          // Load sessions from Nostr relay
+          await loadSessionsFromNostr();
+
+          await showDashboard();
+        } else {
+          showError(data.error || 'Authentication failed');
         }
       } catch (e) {
-        document.getElementById('session-result').textContent = 'Error: ' + e.message;
+        showError('Network error: ' + e.message);
       }
     }
 
-    async function refreshBalance() {
-      if (!sessionKey) return;
+    // Fetch Nostr profile from relays
+    async function fetchNostrProfile(pubkey) {
+      const relays = [
+        'wss://relay.damus.io',
+        'wss://relay.nostr.band',
+        'wss://nos.lol',
+        'wss://relay.snort.social'
+      ];
+
+      for (const relayUrl of relays) {
+        try {
+          const profile = await fetchProfileFromRelay(relayUrl, pubkey);
+          if (profile) return profile;
+        } catch (e) {
+          console.log(`Failed to fetch from ${relayUrl}:`, e.message);
+        }
+      }
+      return null;
+    }
+
+    function fetchProfileFromRelay(relayUrl, pubkey) {
+      return new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          ws.close();
+          resolve(null);
+        }, 5000);
+
+        const ws = new WebSocket(relayUrl);
+        const subId = Math.random().toString(36).slice(2);
+
+        ws.onopen = () => {
+          // Request kind 0 (profile metadata) for this pubkey
+          ws.send(JSON.stringify(['REQ', subId, { kinds: [0], authors: [pubkey], limit: 1 }]));
+        };
+
+        ws.onmessage = (e) => {
+          const msg = JSON.parse(e.data);
+          if (msg[0] === 'EVENT' && msg[2]?.kind === 0) {
+            clearTimeout(timeout);
+            ws.close();
+            try {
+              const profile = JSON.parse(msg[2].content);
+              resolve(profile);
+            } catch {
+              resolve(null);
+            }
+          } else if (msg[0] === 'EOSE') {
+            clearTimeout(timeout);
+            ws.close();
+            resolve(null);
+          }
+        };
+
+        ws.onerror = () => {
+          clearTimeout(timeout);
+          reject(new Error('WebSocket error'));
+        };
+      });
+    }
+
+    // Show dashboard
+    async function showDashboard() {
+      document.getElementById('login-view').classList.add('hidden');
+      document.getElementById('dashboard-view').classList.remove('hidden');
+
+      // Show truncated pubkey
+      const shortPubkey = devPubkey.slice(0, 8) + '...' + devPubkey.slice(-8);
+      document.getElementById('dev-pubkey').textContent = devPubkey;
+
+      // Fetch Nostr profile from relays
+      const profile = await fetchNostrProfile(devPubkey);
+      if (profile) {
+        displayNostrProfile(profile);
+      }
+
+      await getDeveloperProfile();
+      await loadGateways();
+    }
+
+    function displayNostrProfile(profile) {
+      const header = document.getElementById('profile-header');
+      const nameEl = document.getElementById('profile-name');
+      const nip05El = document.getElementById('profile-nip05');
+      const avatarEl = document.getElementById('profile-avatar');
+      const lnInput = document.getElementById('lightning-address');
+
+      if (profile.name || profile.display_name) {
+        header.classList.remove('hidden');
+        header.style.display = 'flex';
+        nameEl.textContent = profile.display_name || profile.name;
+
+        if (profile.nip05) {
+          nip05El.textContent = profile.nip05;
+        }
+
+        if (profile.picture) {
+          avatarEl.src = profile.picture;
+          avatarEl.style.display = 'block';
+        }
+
+        // Auto-fill lightning address if not already set
+        if (profile.lud16 && lnInput && !lnInput.value) {
+          lnInput.value = profile.lud16;
+          // Auto-save to backend
+          updateLightningAddress(true);
+        }
+      }
+    }
+
+    // Get developer profile
+    async function getDeveloperProfile() {
+      if (!devToken) return;
       try {
-        const res = await fetch(API + '/api/sessions/me', {
-          headers: { 'X-Session-Key': sessionKey }
+        const res = await fetch(API + '/api/developers/me', {
+          headers: { 'Authorization': 'Bearer ' + devToken }
         });
         const data = await res.json();
         if (data.balanceSats !== undefined) {
-          showSessionInfo(data);
+          document.getElementById('dev-balance').textContent = data.balanceSats;
+          document.getElementById('dev-gateways').textContent = data.gatewayCount || 0;
+          if (data.lightningAddress) {
+            document.getElementById('lightning-address').value = data.lightningAddress;
+          }
         } else if (res.status === 401) {
           logout();
         }
@@ -176,21 +827,485 @@
       }
     }
 
-    function showSessionInfo(session) {
-      document.getElementById('session-create').classList.add('hidden');
-      document.getElementById('session-info').classList.remove('hidden');
-      document.getElementById('session-key-display').textContent = sessionKey;
-      document.getElementById('session-balance').textContent = session.balanceSats || 0;
+    // Update lightning address
+    async function updateLightningAddress(silent = false) {
+      const address = document.getElementById('lightning-address').value.trim();
+      if (!address) return;
+
+      try {
+        const res = await fetch(API + '/api/developers/me', {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + devToken
+          },
+          body: JSON.stringify({ lightningAddress: address })
+        });
+        const data = await res.json();
+        if (data.message && !silent) {
+          alert('Lightning address updated!');
+        }
+      } catch (e) {
+        if (!silent) showError('Failed to update: ' + e.message);
+      }
     }
 
+    // === Gateway functions ===
+
+    let gatewaysList = [];
+
+    async function loadGateways() {
+      if (!devToken) return;
+      try {
+        const res = await fetch(API + '/api/gateways', {
+          headers: { 'Authorization': 'Bearer ' + devToken }
+        });
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          gatewaysList = data;
+          document.getElementById('dev-gateways').textContent = data.length;
+          renderGatewaysList();
+        }
+      } catch (e) {
+        console.error('Error loading gateways:', e);
+      }
+    }
+
+    function renderGatewaysList() {
+      const container = document.getElementById('gateways-list');
+      if (gatewaysList.length === 0) {
+        container.innerHTML = '<div style="color: #666; font-size: 12px; text-align: center; padding: 10px;">No gateways yet</div>';
+        return;
+      }
+
+      container.innerHTML = gatewaysList.map(gw => `
+        <div style="background: #1a1a1a; border: 1px solid #333; border-radius: 8px; padding: 12px; margin-top: 10px;">
+          <div style="display: flex; justify-content: space-between; align-items: start;">
+            <div style="flex: 1;">
+              <div style="font-weight: 600; color: #fff;">${gw.name}</div>
+              <div style="font-size: 11px; color: #666; margin-top: 4px; word-break: break-all;">${gw.targetUrl}</div>
+              <div style="font-size: 12px; color: #7c3aed; margin-top: 6px;">
+                <span style="background: #2a2a2a; padding: 2px 8px; border-radius: 4px; font-family: monospace;">${gw.pricePerRequestSats} sat${gw.pricePerRequestSats !== 1 ? 's' : ''}/req</span>
+                <span style="color: ${gw.isActive ? '#4caf50' : '#f44336'}; margin-left: 8px;">${gw.isActive ? 'Active' : 'Inactive'}</span>
+              </div>
+            </div>
+            <button onclick="copyGatewayUrl('${gw.id}')" class="btn" style="padding: 6px 12px; font-size: 11px;">Copy URL</button>
+          </div>
+          <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #333;">
+            <div style="font-size: 11px; color: #888;">Proxy URL:</div>
+            <div style="font-size: 12px; font-family: monospace; color: #7c3aed; margin-top: 4px; word-break: break-all;">https://gw.telcharlabs.io/g/${gw.id}/</div>
+          </div>
+          <div style="display: flex; gap: 8px; margin-top: 10px;">
+            <button onclick="toggleGateway('${gw.id}', ${!gw.isActive})" class="btn" style="flex: 1; padding: 8px; font-size: 12px;">${gw.isActive ? 'Disable' : 'Enable'}</button>
+            <button onclick="deleteGateway('${gw.id}')" class="btn" style="padding: 8px; font-size: 12px; border-color: #f44336; color: #f44336;">Delete</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function showCreateGateway() {
+      document.getElementById('create-gateway-form').classList.remove('hidden');
+    }
+
+    function hideCreateGateway() {
+      document.getElementById('create-gateway-form').classList.add('hidden');
+      document.getElementById('gw-name').value = '';
+      document.getElementById('gw-target-url').value = '';
+      document.getElementById('gw-price').value = '1';
+      document.getElementById('gw-description').value = '';
+      document.getElementById('create-gateway-status').textContent = '';
+    }
+
+    async function createGateway() {
+      const name = document.getElementById('gw-name').value.trim();
+      const targetUrl = document.getElementById('gw-target-url').value.trim();
+      const price = parseInt(document.getElementById('gw-price').value) || 1;
+      const description = document.getElementById('gw-description').value.trim();
+      const statusEl = document.getElementById('create-gateway-status');
+
+      if (!name) {
+        statusEl.style.color = '#f44336';
+        statusEl.textContent = 'Name is required';
+        return;
+      }
+
+      if (!targetUrl) {
+        statusEl.style.color = '#f44336';
+        statusEl.textContent = 'Target URL is required';
+        return;
+      }
+
+      try {
+        new URL(targetUrl);
+      } catch {
+        statusEl.style.color = '#f44336';
+        statusEl.textContent = 'Invalid URL format';
+        return;
+      }
+
+      statusEl.style.color = '#888';
+      statusEl.textContent = 'Creating gateway...';
+
+      try {
+        const res = await fetch(API + '/api/gateways', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + devToken
+          },
+          body: JSON.stringify({ name, targetUrl, pricePerRequestSats: price, description: description || undefined })
+        });
+
+        const data = await res.json();
+
+        if (data.id) {
+          statusEl.style.color = '#4caf50';
+          statusEl.textContent = 'Gateway created!';
+          hideCreateGateway();
+          await loadGateways();
+        } else {
+          statusEl.style.color = '#f44336';
+          statusEl.textContent = data.error || 'Failed to create gateway';
+        }
+      } catch (e) {
+        statusEl.style.color = '#f44336';
+        statusEl.textContent = 'Error: ' + e.message;
+      }
+    }
+
+    async function toggleGateway(id, isActive) {
+      try {
+        await fetch(API + '/api/gateways/' + id, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + devToken
+          },
+          body: JSON.stringify({ isActive })
+        });
+        await loadGateways();
+      } catch (e) {
+        console.error('Error toggling gateway:', e);
+      }
+    }
+
+    async function deleteGateway(id) {
+      if (!confirm('Delete this gateway? This cannot be undone.')) return;
+
+      try {
+        await fetch(API + '/api/gateways/' + id, {
+          method: 'DELETE',
+          headers: { 'Authorization': 'Bearer ' + devToken }
+        });
+        await loadGateways();
+      } catch (e) {
+        console.error('Error deleting gateway:', e);
+      }
+    }
+
+    function copyGatewayUrl(id) {
+      navigator.clipboard.writeText('https://gw.telcharlabs.io/g/' + id + '/');
+      alert('Gateway URL copied!');
+    }
+
+    // Request payout
+    async function requestPayout() {
+      const amountInput = document.getElementById('payout-amount');
+      const statusEl = document.getElementById('payout-status');
+      const amount = parseInt(amountInput.value);
+
+      if (!amount || amount < 1) {
+        statusEl.style.color = '#f44336';
+        statusEl.textContent = 'Enter a valid amount';
+        return;
+      }
+
+      const balance = parseInt(document.getElementById('dev-balance').textContent);
+      if (amount > balance) {
+        statusEl.style.color = '#f44336';
+        statusEl.textContent = 'Insufficient balance';
+        return;
+      }
+
+      const lnAddress = document.getElementById('lightning-address').value.trim();
+      if (!lnAddress) {
+        statusEl.style.color = '#f44336';
+        statusEl.textContent = 'Set a Lightning address first';
+        return;
+      }
+
+      statusEl.style.color = '#888';
+      statusEl.textContent = 'Processing payout...';
+
+      try {
+        const res = await fetch(API + '/api/developers/payout', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + devToken
+          },
+          body: JSON.stringify({ amountSats: amount })
+        });
+
+        const data = await res.json();
+
+        if (data.payoutId) {
+          statusEl.style.color = '#4caf50';
+          statusEl.textContent = `Payout successful! ${amount} sats sent.`;
+          document.getElementById('dev-balance').textContent = data.newBalance;
+          amountInput.value = '';
+        } else {
+          statusEl.style.color = '#f44336';
+          statusEl.textContent = data.error || 'Payout failed';
+        }
+      } catch (e) {
+        statusEl.style.color = '#f44336';
+        statusEl.textContent = 'Error: ' + e.message;
+      }
+    }
+
+    // Logout
     function logout() {
-      sessionKey = null;
-      currentTopupId = null;
-      localStorage.removeItem('sessionKey');
-      document.getElementById('session-create').classList.remove('hidden');
-      document.getElementById('session-info').classList.add('hidden');
+      devToken = null;
+      devPubkey = null;
+      tempPrivateKey = null;
+      currentPrivateKey = null;
+      sessions = [];
+      localStorage.removeItem('devToken');
+      localStorage.removeItem('devPubkey');
+      document.getElementById('login-view').classList.remove('hidden');
+      document.getElementById('dashboard-view').classList.add('hidden');
+      document.getElementById('create-form').classList.add('hidden');
+      document.getElementById('import-form').classList.add('hidden');
+    }
+
+    // Show error
+    function showError(msg) {
+      const el = document.getElementById('login-error');
+      el.textContent = msg;
+      el.classList.remove('hidden');
+      setTimeout(() => el.classList.add('hidden'), 5000);
+    }
+
+    // === Session/Consumer functions ===
+
+    async function saveSessions() {
+      // Save to Nostr relay if logged in
+      if (devPubkey) {
+        await saveSessionsToNostr();
+      }
+    }
+
+    async function renderSessionsList() {
+      const container = document.getElementById('sessions-container');
+      const noSessions = document.getElementById('no-sessions');
+
+      if (sessions.length === 0) {
+        container.innerHTML = '';
+        noSessions.classList.remove('hidden');
+        return;
+      }
+
+      noSessions.classList.add('hidden');
+
+      // Fetch balances for all sessions
+      const sessionData = await Promise.all(sessions.map(async (s) => {
+        try {
+          const res = await fetch(API + '/api/sessions/me', {
+            headers: { 'X-Session-Key': s.key }
+          });
+          const data = await res.json();
+          return { ...s, balance: data.balanceSats || 0 };
+        } catch {
+          return { ...s, balance: '?' };
+        }
+      }));
+
+      container.innerHTML = sessionData.map((s, i) => `
+        <div class="stat-card" style="cursor: pointer; transition: background 0.2s;" onclick="selectSession(${i})" onmouseover="this.style.background='#2a2a2a'" onmouseout="this.style.background='#222'">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <div style="font-family: monospace; color: #7c3aed;">${s.id.slice(0, 8)}...</div>
+              <div style="font-size: 12px; color: #666; margin-top: 4px;">Created ${new Date(s.created).toLocaleDateString()}</div>
+            </div>
+            <div style="text-align: right;">
+              <div class="balance" style="font-size: 18px;">${s.balance}</div>
+              <div style="font-size: 12px; color: #666;">sats</div>
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function createNewSession() {
+      const amount = 1000; // Default amount
+      try {
+        const res = await fetch(API + '/api/sessions/topup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ amountSats: amount })
+        });
+        const data = await res.json();
+
+        if (data.sessionKey) {
+          // Add to sessions list
+          const newSession = {
+            id: data.sessionKey.slice(3, 14), // Short ID from key
+            key: data.sessionKey,
+            created: new Date().toISOString()
+          };
+          sessions.push(newSession);
+          await saveSessions();
+
+          // Select and show invoice
+          selectedSessionKey = data.sessionKey;
+          currentTopupId = data.topupId;
+          showInvoice(data.paymentRequest);
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    function selectSession(index) {
+      const session = sessions[index];
+      selectedSessionKey = session.key;
+
+      document.getElementById('sessions-list').classList.add('hidden');
+      document.getElementById('selected-session').classList.remove('hidden');
+      document.getElementById('session-id-display').textContent = session.id;
+      document.getElementById('session-key-display').textContent = session.key;
+
+      refreshSelectedSession();
+    }
+
+    async function refreshSelectedSession() {
+      if (!selectedSessionKey) return;
+      try {
+        const res = await fetch(API + '/api/sessions/me', {
+          headers: { 'X-Session-Key': selectedSessionKey }
+        });
+        const data = await res.json();
+        document.getElementById('session-balance').textContent = data.balanceSats || 0;
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    function backToSessions() {
+      document.getElementById('selected-session').classList.add('hidden');
       document.getElementById('invoice-display').classList.add('hidden');
-      document.getElementById('session-result').textContent = '';
+      document.getElementById('sessions-list').classList.remove('hidden');
+      selectedSessionKey = null;
+      renderSessionsList();
+    }
+
+    async function topupSelectedSession() {
+      if (!selectedSessionKey) return;
+      const amount = parseInt(document.getElementById('topup-amount').value);
+
+      try {
+        const res = await fetch(API + '/api/sessions/topup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ amountSats: amount, sessionKey: selectedSessionKey })
+        });
+        const data = await res.json();
+
+        if (data.paymentRequest) {
+          currentTopupId = data.topupId;
+          showInvoice(data.paymentRequest);
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    function showInvoice(paymentRequest) {
+      document.getElementById('sessions-list').classList.add('hidden');
+      document.getElementById('selected-session').classList.add('hidden');
+      document.getElementById('invoice-display').classList.remove('hidden');
+      document.getElementById('invoice-string').textContent = paymentRequest;
+      document.getElementById('qr-code').innerHTML =
+        `<img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(paymentRequest)}" alt="QR">`;
+    }
+
+    function closeInvoice() {
+      document.getElementById('invoice-display').classList.add('hidden');
+      if (selectedSessionKey) {
+        document.getElementById('selected-session').classList.remove('hidden');
+        refreshSelectedSession();
+      } else {
+        document.getElementById('sessions-list').classList.remove('hidden');
+        renderSessionsList();
+      }
+    }
+
+    async function deleteSession() {
+      if (!selectedSessionKey) return;
+      if (!confirm('Delete this session? Any remaining balance will be lost.')) return;
+
+      sessions = sessions.filter(s => s.key !== selectedSessionKey);
+      await saveSessions();
+      backToSessions();
+    }
+
+    function showImportSession() {
+      document.getElementById('import-session-form').classList.remove('hidden');
+    }
+
+    function hideImportSession() {
+      document.getElementById('import-session-form').classList.add('hidden');
+      document.getElementById('import-session-key').value = '';
+    }
+
+    async function importSession() {
+      const key = document.getElementById('import-session-key').value.trim();
+      if (!key) {
+        alert('Please enter a session key');
+        return;
+      }
+
+      if (!key.startsWith('sk_')) {
+        alert('Invalid session key format. Should start with sk_');
+        return;
+      }
+
+      // Check if already exists
+      if (sessions.find(s => s.key === key)) {
+        alert('This session is already in your list');
+        hideImportSession();
+        return;
+      }
+
+      // Verify session exists on server
+      try {
+        const res = await fetch(API + '/api/sessions/me', {
+          headers: { 'X-Session-Key': key }
+        });
+        const data = await res.json();
+
+        if (data.balanceSats !== undefined) {
+          sessions.push({
+            id: key.slice(3, 14),
+            key: key,
+            created: new Date().toISOString()
+          });
+          await saveSessions();
+          hideImportSession();
+          renderSessionsList();
+          alert('Session imported successfully!');
+        } else {
+          alert('Invalid session key or session not found');
+        }
+      } catch (e) {
+        alert('Error verifying session: ' + e.message);
+      }
+    }
+
+    function copySessionKey() {
+      navigator.clipboard.writeText(selectedSessionKey);
+      alert('Session key copied!');
     }
 
     function copyInvoice() {
@@ -200,123 +1315,21 @@
     }
 
     async function checkPayment() {
-      if (!currentTopupId || !sessionKey) return;
+      if (!currentTopupId || !selectedSessionKey) return;
       try {
         const res = await fetch(API + '/api/sessions/topup/' + currentTopupId, {
-          headers: { 'X-Session-Key': sessionKey }
+          headers: { 'X-Session-Key': selectedSessionKey }
         });
         const data = await res.json();
-        document.getElementById('session-result').textContent = JSON.stringify(data, null, 2);
         if (data.status === 'paid') {
-          document.getElementById('invoice-display').classList.add('hidden');
-          await refreshBalance();
-          alert('Payment received! Balance updated.');
-        }
-      } catch (e) {
-        document.getElementById('session-result').textContent = 'Error: ' + e.message;
-      }
-    }
-
-    // Gateway test
-    async function testGateway() {
-      if (!sessionKey) {
-        alert('Create a session first by topping up');
-        return;
-      }
-      const gatewayId = document.getElementById('gateway-id').value;
-      const path = document.getElementById('gateway-path').value;
-      try {
-        const res = await fetch(API + '/g/' + gatewayId + path, {
-          headers: { 'X-Session-Key': sessionKey }
-        });
-        const balanceRemaining = res.headers.get('X-Balance-Remaining');
-        const requestCost = res.headers.get('X-Request-Cost');
-        const data = await res.json();
-        let output = '';
-        if (balanceRemaining) {
-          output += `Cost: ${requestCost} sats | Balance: ${balanceRemaining} sats\n\n`;
-        }
-        output += JSON.stringify(data, null, 2);
-        document.getElementById('gateway-result').textContent = output;
-        await refreshBalance();
-      } catch (e) {
-        document.getElementById('gateway-result').textContent = 'Error: ' + e.message;
-      }
-    }
-
-    // Developer functions
-    async function registerDeveloper() {
-      const email = document.getElementById('dev-email').value;
-      const password = document.getElementById('dev-password').value;
-      try {
-        const res = await fetch(API + '/api/developers/register', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password, name: email.split('@')[0] })
-        });
-        const data = await res.json();
-        document.getElementById('dev-result').textContent = JSON.stringify(data, null, 2);
-        if (data.token) {
-          devToken = data.token;
-          localStorage.setItem('devToken', devToken);
-          showDevInfo(data);
-        }
-      } catch (e) {
-        document.getElementById('dev-result').textContent = 'Error: ' + e.message;
-      }
-    }
-
-    async function loginDeveloper() {
-      const email = document.getElementById('dev-email').value;
-      const password = document.getElementById('dev-password').value;
-      try {
-        const res = await fetch(API + '/api/developers/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password })
-        });
-        const data = await res.json();
-        document.getElementById('dev-result').textContent = JSON.stringify(data, null, 2);
-        if (data.token) {
-          devToken = data.token;
-          localStorage.setItem('devToken', devToken);
-          await getDeveloperProfile();
-        }
-      } catch (e) {
-        document.getElementById('dev-result').textContent = 'Error: ' + e.message;
-      }
-    }
-
-    async function getDeveloperProfile() {
-      if (!devToken) return;
-      try {
-        const res = await fetch(API + '/api/developers/me', {
-          headers: { 'Authorization': 'Bearer ' + devToken }
-        });
-        const data = await res.json();
-        if (data.email) {
-          showDevInfo(data);
-        } else if (res.status === 401) {
-          logoutDeveloper();
+          alert('Payment received!');
+          closeInvoice();
+        } else {
+          alert('Payment not yet received. Please wait...');
         }
       } catch (e) {
         console.error(e);
       }
-    }
-
-    function showDevInfo(dev) {
-      document.getElementById('dev-login').classList.add('hidden');
-      document.getElementById('dev-info').classList.remove('hidden');
-      document.getElementById('dev-email-display').textContent = dev.email;
-      document.getElementById('dev-balance').textContent = dev.balanceSats || 0;
-    }
-
-    function logoutDeveloper() {
-      devToken = null;
-      localStorage.removeItem('devToken');
-      document.getElementById('dev-login').classList.remove('hidden');
-      document.getElementById('dev-info').classList.add('hidden');
-      document.getElementById('dev-result').textContent = '';
     }
 
     init();

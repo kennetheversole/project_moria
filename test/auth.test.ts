@@ -1,43 +1,12 @@
 import { describe, it, expect } from "vitest";
 import {
-  hashPassword,
-  verifyPassword,
   generateSessionKey,
   generateToken,
   verifyToken,
+  verifyNostrAuth,
 } from "../src/middleware/auth";
 
 describe("Auth Middleware", () => {
-  describe("hashPassword", () => {
-    it("should hash password consistently", async () => {
-      const password = "testpassword123";
-      const hash1 = await hashPassword(password);
-      const hash2 = await hashPassword(password);
-      expect(hash1).toBe(hash2);
-    });
-
-    it("should produce different hashes for different passwords", async () => {
-      const hash1 = await hashPassword("password1");
-      const hash2 = await hashPassword("password2");
-      expect(hash1).not.toBe(hash2);
-    });
-  });
-
-  describe("verifyPassword", () => {
-    it("should verify correct password", async () => {
-      const password = "securePassword!";
-      const hash = await hashPassword(password);
-      const result = await verifyPassword(password, hash);
-      expect(result).toBe(true);
-    });
-
-    it("should reject incorrect password", async () => {
-      const hash = await hashPassword("correct");
-      const result = await verifyPassword("wrong", hash);
-      expect(result).toBe(false);
-    });
-  });
-
   describe("generateSessionKey", () => {
     it("should generate unique session keys", () => {
       const key1 = generateSessionKey();
@@ -78,6 +47,38 @@ describe("Auth Middleware", () => {
     it("should reject malformed token", async () => {
       const verified = await verifyToken("invalid.token", secret);
       expect(verified).toBeNull();
+    });
+  });
+
+  describe("verifyNostrAuth", () => {
+    it("should reject event with wrong kind", () => {
+      const event = {
+        id: "test",
+        pubkey: "a".repeat(64),
+        created_at: Math.floor(Date.now() / 1000),
+        kind: 1, // wrong kind
+        tags: [],
+        content: "",
+        sig: "test",
+      };
+      const result = verifyNostrAuth(event);
+      expect(result.valid).toBe(false);
+      expect(result.error).toBe("Invalid event kind");
+    });
+
+    it("should reject expired event", () => {
+      const event = {
+        id: "test",
+        pubkey: "a".repeat(64),
+        created_at: Math.floor(Date.now() / 1000) - 120, // 2 minutes ago
+        kind: 22242,
+        tags: [],
+        content: "",
+        sig: "test",
+      };
+      const result = verifyNostrAuth(event);
+      expect(result.valid).toBe(false);
+      expect(result.error).toBe("Event expired");
     });
   });
 });

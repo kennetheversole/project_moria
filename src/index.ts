@@ -205,4 +205,11 @@ app.onError((err, c) => {
   );
 });
 
-export default app;
+import { handleScheduled } from "./scheduled";
+
+export default {
+  fetch: app.fetch,
+  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
+    ctx.waitUntil(handleScheduled(env));
+  },
+};

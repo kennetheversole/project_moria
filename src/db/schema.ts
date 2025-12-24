@@ -120,15 +120,32 @@ export const payouts = pgTable(
     amountSats: integer("amount_sats").notNull(),
     lightningAddress: text("lightning_address").notNull(),
     status: text("status").notNull().default("pending"), // pending, completed, failed
+    isAutoPayout: boolean("is_auto_payout").notNull().default(false), // true if triggered by cron
     createdAt: timestamp("created_at").notNull().$defaultFn(() => new Date()),
     completedAt: timestamp("completed_at"),
   },
   (table) => [index("payouts_developer_idx").on(table.developerId)]
 );
 
+// Platform fee sweeps - tracking platform fee payouts
+export const platformSweeps = pgTable(
+  "platform_sweeps",
+  {
+    id: text("id").primaryKey(), // nanoid
+    amountSats: integer("amount_sats").notNull(),
+    lightningAddress: text("lightning_address").notNull(),
+    paymentHash: text("payment_hash"),
+    status: text("status").notNull().default("pending"), // pending, completed, failed
+    createdAt: timestamp("created_at").notNull().$defaultFn(() => new Date()),
+    completedAt: timestamp("completed_at"),
+  }
+);
+
 // Type exports
 export type Developer = typeof developers.$inferSelect;
 export type NewDeveloper = typeof developers.$inferInsert;
+export type PlatformSweep = typeof platformSweeps.$inferSelect;
+export type NewPlatformSweep = typeof platformSweeps.$inferInsert;
 export type Gateway = typeof gateways.$inferSelect;
 export type NewGateway = typeof gateways.$inferInsert;
 export type Session = typeof sessions.$inferSelect;

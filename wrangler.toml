@@ -36,6 +36,10 @@ routes = [
 binding = "HYPERDRIVE"
 id = "eb0bd6695612428db11da7d683dd1da2"
 
+# Cron trigger for auto-payouts (every 5 minutes)
+[env.production.triggers]
+crons = ["*/5 * * * *"]
+
 # Staging environment
 [env.staging]
 name = "project-moria-staging"

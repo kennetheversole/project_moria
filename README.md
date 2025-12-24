@@ -17,7 +17,7 @@ User (has sats) → Moria Gateway → Your API
 
 - **Monetize APIs** - Charge per call without Stripe's 30¢ minimum
 - **Gate content** - Articles, videos, data behind micropayments
-- **AI agent access** - Let bots pay for API access programmatically
+- **AI agent payments** - Programmatic payments for autonomous agents (no KYC, instant, permissionless)
 - **Global payments** - No bank account needed, works anywhere
 - **Anti-abuse** - Real cost per request stops spam
 
@@ -28,7 +28,10 @@ User (has sats) → Moria Gateway → Your API
 - Anonymous sessions - no signup required, just pay and get a key
 - Request logging and analytics
 - 2% platform fee (configurable)
-- Automatic developer payouts to Lightning addresses
+- **Auto-payouts** - Developers paid automatically every 5 minutes when balance ≥ 100 sats
+- **Platform fee sweep** - Platform fees auto-sent to separate Lightning address
+- **Nostr session storage** - Sessions synced via NIP-78 across devices
+- **Browser 402 flow** - QR code payment page with auto-redirect on payment
 
 ## Tech Stack
 
@@ -187,28 +190,50 @@ Environment variables (`.dev.vars` or Cloudflare dashboard):
 | `JWT_SECRET` | Secret for signing developer tokens |
 | `ALBY_API_KEY` | Alby API key for Lightning payments |
 | `PLATFORM_FEE_PERCENT` | Fee percentage (default: 2) |
+| `PLATFORM_LIGHTNING_ADDRESS` | Lightning address for platform fee sweeps |
 
 ## Database Schema
 
 ```
-developers    - API sellers (email, password, balance, lightning_address)
-gateways      - APIs to proxy (target_url, price_per_request, developer_id)
-sessions      - Anonymous API consumers (session_key, balance)
-topups        - Lightning payment tracking
-requests      - Usage logs (gateway, session, cost, method, path)
-payouts       - Developer withdrawal history
+developers      - API sellers (email, password, balance, lightning_address)
+gateways        - APIs to proxy (target_url, price_per_request, developer_id)
+sessions        - Anonymous API consumers (session_key, balance)
+topups          - Lightning payment tracking
+requests        - Usage logs (gateway, session, cost, method, path)
+payouts         - Developer withdrawal history (includes is_auto_payout flag)
+platform_sweeps - Platform fee payout tracking
 ```
+
+## Auto-Payouts (Cron Job)
+
+Every 5 minutes, a scheduled job runs:
+
+1. **Platform Fee Sweep**: If accumulated platform fees ≥ 100 sats, sends to `PLATFORM_LIGHTNING_ADDRESS`
+2. **Developer Auto-Payouts**: Any developer with balance ≥ 100 sats and a Lightning address set gets paid automatically
+
+This creates an "instant payout" experience - developers don't need to manually withdraw.
+
+## Browser 402 Flow
+
+When a browser hits a gateway without a session:
+
+1. Shows a QR code payment page
+2. Creates a temporary session + invoice
+3. Polls for payment confirmation
+4. Auto-redirects with `?session_key=xxx` on payment
+5. Session persists via Nostr (NIP-78) for cross-device sync
 
 ## Deployment
 
 ```bash
 # Deploy to Cloudflare Workers
-pnpm wrangler deploy
+pnpm wrangler deploy --env production
 
 # Set secrets
-pnpm wrangler secret put DATABASE_URL
-pnpm wrangler secret put JWT_SECRET
-pnpm wrangler secret put ALBY_API_KEY
+pnpm wrangler secret put DATABASE_URL --env production
+pnpm wrangler secret put JWT_SECRET --env production
+pnpm wrangler secret put ALBY_API_KEY --env production
+pnpm wrangler secret put PLATFORM_LIGHTNING_ADDRESS --env production
 ```
 
 ## Economics
@@ -244,6 +269,18 @@ pnpm db:migrate:pg    # Apply migrations to Postgres
 pnpm db:local         # Apply migrations to local D1
 pnpm db:studio        # Open Drizzle Studio
 ```
+
+## AI Agent Payments
+
+Moria is ideal for autonomous AI agents that need to pay for services:
+
+- **No KYC** - Agents can't do identity verification
+- **Programmatic** - Just API calls, no card forms
+- **Micropayments** - Pay per token, per call, per action
+- **Instant** - Sub-second settlement
+- **Permissionless** - No signup, no approval needed
+
+With Nostr integration, agents can have identity (npub) + money (Lightning) without human involvement.
 
 ## License
 

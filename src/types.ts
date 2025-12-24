@@ -26,6 +26,7 @@ export interface Env {
   ALBY_API_KEY?: string;
   JWT_SECRET?: string;
   PLATFORM_FEE_PERCENT?: string; // defaults to 2
+  PLATFORM_LIGHTNING_ADDRESS?: string; // for auto-sweeping platform fees
   CORS_ORIGIN?: string; // defaults to "*", set to your domain in prod
 }
 

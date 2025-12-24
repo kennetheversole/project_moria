@@ -18,7 +18,8 @@ port = 8787
 # Hyperdrive for PlanetScale Postgres
 [[hyperdrive]]
 binding = "HYPERDRIVE"
-id = "eb0bd6695612428db11da7d683dd1da2"
+id = "86f82eb0f81b438781b653c5730aa714"
+# localConnectionString is set via WRANGLER_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE in .dev.vars
 
 # Environment variables (set in dashboard or via wrangler secret)
 # DATABASE_URL - Neon Postgres connection string (production)
@@ -34,7 +35,7 @@ routes = [
 
 [[env.production.hyperdrive]]
 binding = "HYPERDRIVE"
-id = "eb0bd6695612428db11da7d683dd1da2"
+id = "86f82eb0f81b438781b653c5730aa714"
 
 # Cron trigger for auto-payouts (every 5 minutes)
 [env.production.triggers]

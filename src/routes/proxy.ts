@@ -17,6 +17,16 @@ import type { Env } from "../types";
 
 const app = new Hono<{ Bindings: Env }>();
 
+// HTML escape function to prevent XSS attacks
+function escapeHtml(unsafe: string): string {
+  return unsafe
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 // Check if request is from a browser
 function isBrowserRequest(acceptHeader: string | undefined): boolean {
   return !!acceptHeader?.includes("text/html");
@@ -105,12 +115,17 @@ function generate402Page(
     </div>
   ` : '';
 
+  // Escape user-controlled values to prevent XSS
+  const safeGatewayName = escapeHtml(gatewayName);
+  const safePath = escapeHtml(path);
+  const safeDescription = description ? escapeHtml(description) : null;
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>402 Payment Required - ${gatewayName}</title>
+  <title>402 Payment Required - ${safeGatewayName}</title>
   <script src="https://unpkg.com/nostr-tools@2.10.4/lib/nostr.bundle.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -502,10 +517,10 @@ function generate402Page(
       <div class="status-code">402</div>
       <div class="status-text">Payment Required</div>
 
-      <div class="gateway-name">${gatewayName}</div>
-      <div class="gateway-path">${path}</div>
+      <div class="gateway-name">${safeGatewayName}</div>
+      <div class="gateway-path">${safePath}</div>
 
-      ${description ? `<div class="description">${description}</div>` : ''}
+      ${safeDescription ? `<div class="description">${safeDescription}</div>` : ''}
 
       <div class="price-card">
         <div class="price">${price}</div>
@@ -588,6 +603,16 @@ function generate402Page(
       el.textContent = msg;
       el.classList.add('visible');
       setTimeout(() => el.classList.remove('visible'), 5000);
+    }
+
+    // Fetch server-issued challenge for Nostr auth
+    async function fetchChallenge() {
+      const res = await fetch('/api/developers/challenge');
+      if (!res.ok) {
+        throw new Error('Failed to fetch challenge');
+      }
+      const data = await res.json();
+      return data.challenge;
     }
 
     function showSuccess(msg) {
@@ -1036,10 +1061,13 @@ function generate402Page(
         // Get auth token for DB migration
         let authToken = null;
         try {
+          // Fetch server-issued challenge first
+          const challenge = await fetchChallenge();
+
           const authEvent = {
             kind: 22242,
             created_at: Math.floor(Date.now() / 1000),
-            tags: [['challenge', 'moria-402-' + Date.now()]],
+            tags: [['challenge', challenge]],
             content: 'Authenticate to Moria Gateway',
             pubkey: currentPubkey
           };
@@ -1056,7 +1084,7 @@ function generate402Page(
             authToken = auth.token;
           }
         } catch (e) {
-          console.log('Could not get auth token, skipping DB migration');
+          console.log('Could not get auth token, skipping DB migration:', e.message);
         }
 
         showSuccess('Loading sessions from Nostr relays...');
@@ -1117,10 +1145,13 @@ function generate402Page(
         // Get auth token for DB migration
         let authToken = null;
         try {
+          // Fetch server-issued challenge first
+          const challenge = await fetchChallenge();
+
           const authEventTemplate = {
             kind: 22242,
             created_at: Math.floor(Date.now() / 1000),
-            tags: [['challenge', 'moria-402-' + Date.now()]],
+            tags: [['challenge', challenge]],
             content: 'Authenticate to Moria Gateway'
           };
           const signedAuthEvent = finalizeEvent(authEventTemplate, currentPrivateKey);
@@ -1136,7 +1167,7 @@ function generate402Page(
             authToken = auth.token;
           }
         } catch (e) {
-          console.log('Could not get auth token, skipping DB migration');
+          console.log('Could not get auth token, skipping DB migration:', e.message);
         }
 
         showSuccess('Loading sessions from Nostr relays...');

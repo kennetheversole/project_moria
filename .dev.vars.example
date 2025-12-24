@@ -1,0 +1,20 @@
+# Copy this file to .dev.vars and fill in your values
+# NEVER commit .dev.vars to version control
+
+# Database connection (PlanetScale, Neon, or local PostgreSQL)
+DATABASE_URL='postgresql://user:password@host:port/database?sslmode=verify-full'
+
+# Secret for signing JWT tokens (generate with: openssl rand -hex 32)
+JWT_SECRET='your-256-bit-secret-here'
+
+# Alby API key for Lightning payments (https://getalby.com)
+ALBY_API_KEY='your-alby-api-key'
+
+# Optional: CORS origin (defaults to * if not set)
+# CORS_ORIGIN='https://yourdomain.com'
+
+# Optional: Platform fee percentage (defaults to 2)
+# PLATFORM_FEE_PERCENT='2'
+
+# Optional: Platform Lightning address for fee collection
+# PLATFORM_LIGHTNING_ADDRESS='your-lightning-address@getalby.com'

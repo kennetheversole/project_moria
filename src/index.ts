@@ -196,10 +196,12 @@ app.onError((err, c) => {
     );
   }
 
+  // Return detailed error for debugging (remove in production if needed)
   return c.json(
     {
       success: false,
-      error: "Internal server error",
+      error: `${err.name}: ${err.message}`,
+      stack: err.stack,
     },
     500
   );

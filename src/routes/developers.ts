@@ -7,6 +7,7 @@ import {
   generateToken,
   authenticateDeveloper,
   verifyNostrAuth,
+  generateChallenge,
 } from "../middleware/auth";
 import { createAlbyService } from "../services/alby";
 import { requireEnv, type Env, type Variables } from "../types";
@@ -19,6 +20,7 @@ import {
   PayoutResponseSchema,
   MessageResponseSchema,
   ErrorResponseSchema,
+  ChallengeResponseSchema,
 } from "../schemas";
 
 const app = new OpenAPIHono<{ Bindings: Env; Variables: Variables }>({
@@ -29,13 +31,41 @@ const app = new OpenAPIHono<{ Bindings: Env; Variables: Variables }>({
   },
 });
 
+// Challenge route - get a server-issued challenge for auth
+const challengeRoute = createRoute({
+  method: "get",
+  path: "/challenge",
+  tags: ["Developers"],
+  summary: "Get authentication challenge",
+  description: "Get a server-issued challenge that must be included in the signed Nostr event. Challenges expire after 60 seconds and can only be used once.",
+  responses: {
+    200: {
+      description: "Challenge generated",
+      content: {
+        "application/json": {
+          schema: ChallengeResponseSchema,
+        },
+      },
+    },
+  },
+});
+
+app.openapi(challengeRoute, async (c) => {
+  const challenge = generateChallenge();
+
+  return c.json({
+    challenge,
+    expiresIn: 60,
+  }, 200);
+});
+
 // Nostr auth route - handles both login and signup
 const authRoute = createRoute({
   method: "post",
   path: "/auth",
   tags: ["Developers"],
   summary: "Authenticate with Nostr",
-  description: "Sign in or create account using a signed Nostr event. If the pubkey is new, an account is automatically created.",
+  description: "Sign in or create account using a signed Nostr event. The event must include a valid challenge from /challenge in its tags: [[\"challenge\", \"moria_...\"]]. If the pubkey is new, an account is automatically created.",
   request: {
     body: {
       content: {
@@ -62,51 +92,71 @@ const authRoute = createRoute({
         },
       },
     },
+    500: {
+      description: "Internal server error",
+      content: {
+        "application/json": {
+          schema: ErrorResponseSchema,
+        },
+      },
+    },
   },
 });
 
 app.openapi(authRoute, async (c) => {
-  const db = requireDb(c.env.DB, c.env.DATABASE_URL, c.env.HYPERDRIVE);
-  const { signedEvent } = c.req.valid("json");
+  try {
+    const db = requireDb(c.env.DB, c.env.DATABASE_URL, c.env.HYPERDRIVE);
+    const { signedEvent } = c.req.valid("json");
 
-  // Verify the Nostr signature
-  const authResult = verifyNostrAuth(signedEvent);
-  if (!authResult.valid || !authResult.pubkey) {
-    return c.json({ success: false as const, error: authResult.error || "Invalid signature" }, 400);
-  }
+    // Verify the Nostr signature
+    const authResult = verifyNostrAuth(signedEvent);
+    if (!authResult.valid || !authResult.pubkey) {
+      return c.json({ success: false as const, error: authResult.error || "Invalid signature" }, 400);
+    }
 
-  const pubkey = authResult.pubkey;
+    const pubkey = authResult.pubkey;
 
-  // Check if developer exists
-  let developer = await db
-    .select()
-    .from(developers)
-    .where(eq(developers.id, pubkey))
-    .limit(1);
-
-  // If not exists, create new developer
-  if (developer.length === 0) {
-    await db.insert(developers).values({
-      id: pubkey,
-    });
-
-    developer = await db
+    // Check if developer exists
+    let developer = await db
       .select()
       .from(developers)
       .where(eq(developers.id, pubkey))
       .limit(1);
+
+    // If not exists, create new developer
+    if (developer.length === 0) {
+      await db.insert(developers).values({
+        id: pubkey,
+      });
+
+      developer = await db
+        .select()
+        .from(developers)
+        .where(eq(developers.id, pubkey))
+        .limit(1);
+    }
+
+    const token = await generateToken(
+      { developerId: pubkey },
+      requireEnv(c.env, "JWT_SECRET")
+    );
+
+    return c.json({
+      id: developer[0].id,
+      pubkey: developer[0].id,
+      token,
+    }, 200);
+  } catch (error) {
+    console.error("Auth error:", error);
+    const errorMessage = error instanceof Error
+      ? `${error.name}: ${error.message}`
+      : String(error);
+    return c.json({
+      success: false as const,
+      error: errorMessage,
+      stack: error instanceof Error ? error.stack : undefined,
+    }, 500);
   }
-
-  const token = await generateToken(
-    { developerId: pubkey },
-    requireEnv(c.env, "JWT_SECRET")
-  );
-
-  return c.json({
-    id: developer[0].id,
-    pubkey: developer[0].id,
-    token,
-  }, 200);
 });
 
 // Get profile route

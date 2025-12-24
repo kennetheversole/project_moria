@@ -33,6 +33,11 @@ export const DeveloperAuthResponseSchema = z.object({
   token: z.string().openapi({ example: "eyJhbGciOiJIUzI1NiIs..." }),
 });
 
+export const ChallengeResponseSchema = z.object({
+  challenge: z.string().openapi({ example: "moria_a1b2c3d4e5f6..._1703123456789" }),
+  expiresIn: z.number().openapi({ example: 60, description: "Seconds until challenge expires" }),
+});
+
 export const DeveloperProfileResponseSchema = z.object({
   id: z.string().openapi({ example: "a1b2c3d4e5f6..." }),
   pubkey: z.string().openapi({ example: "a1b2c3d4e5f6..." }),
